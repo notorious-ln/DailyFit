@@ -1,62 +1,69 @@
-```dbdiagram
-Table users {
-  id int [pk]
-  email string
-  password_hash string
-  display_name string
-  role string
-  goal int
-  level int
-}
+```mermaid
+erDiagram
+    USERS ||--o{ ACTIVE_PLANS : "id → user_id"
+    USERS ||--o{ DIARY_NOTES : "id → user_id"
+    USERS ||--o{ RECOMMENDATIONS : "id → user_id"
+    TEMPLATES ||--o{ ACTIVE_PLANS : "id → template_id"
+    ACTIVE_PLANS ||--o{ DAY_TASKS : "id → plan_id"
 
-Table templates {
-  id int [pk]
-  type string
-  title string
-  level_place string
-  body_json json
-  is_visible boolean
-}
+    USERS {
+        int id PK
+        string email
+        string password_hash
+        string display_name
+        string role
+        int goal
+        int level
+    }
 
-Table active_plans {
-  id int [pk]
-  user_id int [ref: > users.id]
-  template_id int [ref: > templates.id]
-  is_active boolean
-  started_at datetime
-  ended_at datetime
-}
+    TEMPLATES {
+        int id PK
+        string type
+        string title
+        string level_place
+        json body_json
+        boolean is_visible
+    }
 
-Table day_tasks {
-  id int [pk]
-  plan_id int [ref: > active_plans.id]
-  task_date date
-  kind string
-  title string
-  status string
-  details_json json
-  completed_at datetime
-}
+    ACTIVE_PLANS {
+        int id PK
+        int user_id FK
+        int template_id FK
+        boolean is_active
+        datetime started_at
+        datetime ended_at
+    }
 
-Table diary_notes {
-  id int [pk]
-  user_id int [ref: > users.id]
-  note_date date
-  feeling string
-  weight_kg float
-  user_comment string
-  advisor_comment string
-}
+    DAY_TASKS {
+        int id PK
+        int plan_id FK
+        date task_date
+        string kind
+        string title
+        string status
+        json details_json
+        datetime completed_at
+    }
 
-Table recommendations {
-  id int [pk]
-  user_id int [ref: > users.id]
-  period_from date
-  period_to date
-  source string
-  status string
-  summary_text string
-  items_json json
-  created_at datetime
-}
+    DIARY_NOTES {
+        int id PK
+        int user_id FK
+        date note_date
+        string feeling
+        float weight_kg
+        string user_comment
+        string advisor_comment
+    }
+
+    RECOMMENDATIONS {
+        int id PK
+        int user_id FK
+        date period_from
+        date period_to
+        string source
+        string status
+        string summary_text
+        json items_json
+        datetime created_at
+    }
 ```
