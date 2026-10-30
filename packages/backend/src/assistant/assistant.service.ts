@@ -84,6 +84,7 @@ export type AnalyzeResponse = {
 type AnalyzeInput = {
   period: AnalyzePeriodValue;
   date?: string;
+  simulate_timeout?: boolean;
 };
 
 type ResolvedComment = {
@@ -251,7 +252,12 @@ export class AssistantService {
     });
 
     const { text, source, modelCalled, externalError } =
-      await this.resolveComment(payload, rulesText, user.cloudAssistantEnabled);
+      await this.resolveComment(
+        payload,
+        rulesText,
+        user.cloudAssistantEnabled,
+        Boolean(dto.simulate_timeout),
+      );
 
     if (externalError) {
       await this.journal.record({
@@ -412,8 +418,19 @@ export class AssistantService {
     payload: LlmPayload,
     rulesText: string,
     cloudAssistantEnabled: boolean,
+    simulateTimeout = false,
   ): Promise<ResolvedComment> {
     const local = isSafeComment(rulesText) ? rulesText : SAFE_FALLBACK;
+
+    if (simulateTimeout) {
+      this.logger.warn('учебный сценарий таймаута внешней модели');
+      return {
+        text: local,
+        source: AssistantSource.rules,
+        modelCalled: true,
+        externalError: { reason: 'timeout' },
+      };
+    }
 
     if (!cloudAssistantEnabled || !this.llm.isEnabled()) {
       return {

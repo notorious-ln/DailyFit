@@ -31,7 +31,7 @@ const NAV: Array<{
 }> = [
   { id: 'today', label: 'Сегодня', icon: 'calendar', ready: true },
   { id: 'plans', label: 'Планы', icon: 'clipboard', ready: true },
-  { id: 'progress', label: 'Прогресс', icon: 'chart' },
+  { id: 'progress', label: 'Прогресс', icon: 'chart', ready: true },
   { id: 'profile', label: 'Профиль', icon: 'user' },
   { id: 'diary', label: 'Дневник', icon: 'book' },
   { id: 'templates', label: 'Шаблоны', icon: 'templates', adminOnly: true },

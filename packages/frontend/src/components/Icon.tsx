@@ -11,6 +11,7 @@ type IconName =
   | 'grid'
   | 'logout'
   | 'meal'
+  | 'sparkles'
   | 'templates'
   | 'user';
 
@@ -59,6 +60,13 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <path d="M4 10h16v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-9z" />
       <path d="M8 10V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4" />
+    </>
+  ),
+  sparkles: (
+    <>
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+      <path d="m5.6 5.6 2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+      <circle cx="12" cy="12" r="3" />
     </>
   ),
   templates: (

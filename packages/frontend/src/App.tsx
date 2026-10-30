@@ -12,6 +12,7 @@ import type { NavId } from './components/AppShell';
 import { AuthPage } from './pages/AuthPage';
 import { PlansPage } from './pages/PlansPage';
 import { ProfileSetupPage } from './pages/ProfileSetupPage';
+import { ProgressPage } from './pages/ProgressPage';
 import { TodayPage } from './pages/TodayPage';
 
 function needsSetup(user: Pick<PublicUser, 'goal' | 'level'> | null): boolean {
@@ -121,6 +122,16 @@ export function App() {
   if (route === 'plans') {
     return (
       <PlansPage
+        user={profile}
+        onLogout={handleLogout}
+        onNavigate={setRoute}
+      />
+    );
+  }
+
+  if (route === 'progress') {
+    return (
+      <ProgressPage
         user={profile}
         onLogout={handleLogout}
         onNavigate={setRoute}

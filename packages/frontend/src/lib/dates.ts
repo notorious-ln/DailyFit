@@ -95,3 +95,41 @@ export function shortDisplayName(
   }
   return firstName(null, email);
 }
+
+export function formatWeekRange(fromKey: string, toKey: string): string {
+  const from = parseDateKey(fromKey);
+  const to = parseDateKey(toKey);
+  const sameMonth = from.getMonth() === to.getMonth();
+  if (sameMonth) {
+    return `${from.getDate()}–${to.getDate()} ${MONTHS_GENITIVE[from.getMonth()].toUpperCase()}`;
+  }
+  return `${from.getDate()} ${MONTHS_GENITIVE[from.getMonth()].toUpperCase()} – ${to.getDate()} ${MONTHS_GENITIVE[to.getMonth()].toUpperCase()}`;
+}
+
+export function formatLongDate(dateKey: string): string {
+  const date = parseDateKey(dateKey);
+  const weekdayNames = [
+    'воскресенье',
+    'понедельник',
+    'вторник',
+    'среда',
+    'четверг',
+    'пятница',
+    'суббота',
+  ];
+  const weekday = weekdayNames[date.getDay()];
+  const label = `${weekday}, ${date.getDate()} ${MONTHS_GENITIVE[date.getMonth()]}`;
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+export function currentIsoWeekRange(now = new Date()): {
+  from: string;
+  to: string;
+} {
+  const monday =
+    now.getDay() === 0 ? addDays(now, -6) : addDays(now, 1 - now.getDay());
+  return {
+    from: toDateKey(monday),
+    to: toDateKey(addDays(monday, 6)),
+  };
+}
