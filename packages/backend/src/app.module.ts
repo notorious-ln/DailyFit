@@ -10,6 +10,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProfileModule } from './profile/profile.module';
 import { ProgressModule } from './progress/progress.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
+import { ReportsModule } from './reports/reports.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { UsersModule } from './users/users.module';
     DayModule,
     DiaryModule,
     ProgressModule,
+    ReportsModule,
     AssistantModule,
     RecommendationsModule,
   ],
