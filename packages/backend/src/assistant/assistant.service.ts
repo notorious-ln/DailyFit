@@ -101,6 +101,7 @@ export class AssistantService {
     const recentFrom = addUtcDays(to, -6);
     const weekStart = startOfIsoWeek(to);
     const weekEnd = addUtcDays(weekStart, 6);
+    const historyFrom = addUtcDays(weekStart, -14);
     const futureTo = addUtcDays(today, 14);
 
     const [
@@ -108,6 +109,7 @@ export class AssistantService {
       notes,
       plans,
       recentWorkouts,
+      historyWorkouts,
       weekWorkouts,
       futureWorkouts,
       recentMeals,
@@ -136,6 +138,14 @@ export class AssistantService {
           kind: 'workout',
           plan: { userId },
           taskDate: { gte: recentFrom, lte: to },
+        },
+        orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.dayTask.findMany({
+        where: {
+          kind: 'workout',
+          plan: { userId },
+          taskDate: { gte: historyFrom, lte: weekEnd },
         },
         orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
       }),
@@ -226,7 +236,11 @@ export class AssistantService {
       feelings: wellbeing,
     });
 
-    const { text, source } = await this.resolveComment(payload, rulesText);
+    const { text, source } = await this.resolveComment(
+      payload,
+      rulesText,
+      user.cloudAssistantEnabled,
+    );
 
     const reply = await this.prisma.assistantReply.create({
       data: {
@@ -253,6 +267,7 @@ export class AssistantService {
       periodTo: to,
       today,
       recentWorkouts: recentWorkouts.map((task) => this.toWorkoutInput(task)),
+      historyWorkouts: historyWorkouts.map((task) => this.toWorkoutInput(task)),
       weekWorkouts: weekWorkouts.map((task) => this.toWorkoutInput(task)),
       futureWorkouts: futureWorkouts.map((task) => this.toWorkoutInput(task)),
       feelings: wellbeing,
@@ -357,10 +372,11 @@ export class AssistantService {
   private async resolveComment(
     payload: LlmPayload,
     rulesText: string,
+    cloudAssistantEnabled: boolean,
   ): Promise<{ text: string; source: AssistantSource }> {
     const local = isSafeComment(rulesText) ? rulesText : SAFE_FALLBACK;
 
-    if (!this.llm.isEnabled()) {
+    if (!cloudAssistantEnabled || !this.llm.isEnabled()) {
       return { text: local, source: AssistantSource.rules };
     }
 

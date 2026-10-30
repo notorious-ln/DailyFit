@@ -73,6 +73,7 @@ model User {
   weightKg        Float?         @map("weight_kg")
   limitationTags  String[]       @default([]) @map("limitation_tags")
   freeNote        String?        @map("free_note")
+  cloudAssistantEnabled Boolean  @default(true) @map("cloud_assistant_enabled")
   activePlans     ActivePlan[]
   diaryNotes      DiaryNote[]
   assistantReplies AssistantReply[]

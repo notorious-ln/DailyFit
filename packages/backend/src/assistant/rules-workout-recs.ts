@@ -65,6 +65,8 @@ export type BuildWorkoutRecsInput = {
   periodTo: Date;
   today: Date;
   recentWorkouts: WorkoutTaskInput[];
+  /** Workout tasks spanning the last three ISO weeks ending at `periodTo`. */
+  historyWorkouts: WorkoutTaskInput[];
   weekWorkouts: WorkoutTaskInput[];
   futureWorkouts: WorkoutTaskInput[];
   feelings: Array<{ feeling: Feeling }>;
@@ -167,11 +169,18 @@ export function buildWorkoutRecommendations(
   ).length;
   const workoutPercent = compliancePercent(recentInWindow);
   const hardenBlocked = workoutSkipCount >= 2;
+  const threeWeeksAbove90 = consecutiveWeeksAbove(
+    input.historyWorkouts,
+    input.periodTo,
+    3,
+    90,
+  );
 
   const direction = resolveDirection({
     workoutPercent,
     workoutSkipCount,
     hardenBlocked,
+    threeWeeksAbove90,
     feelings: input.feelings,
     hasPartial: recentInWindow.some(
       (task) => task.status === TaskStatus.partial,
@@ -203,7 +212,7 @@ export function buildWorkoutRecommendations(
   let seq = 0;
   const easeReason = reasonForEase(workoutPercent, workoutSkipCount);
   const hardenReason =
-    'Сводка по тренировкам высокая, самочувствие в основном лёгкое.';
+    'Три недели подряд сводка по тренировкам выше 90%, самочувствие отмечено как «легко».';
 
   if (direction === 'ease') {
     for (const task of editable) {
@@ -257,35 +266,60 @@ export function buildWorkoutRecommendations(
   return filterItemsByVolume(candidates, baseVolume);
 }
 
+/** Last `weekCount` ISO weeks ending at the week of `periodTo`, oldest first. */
+export function consecutiveWeeksAbove(
+  workouts: WorkoutTaskInput[],
+  periodTo: Date,
+  weekCount: number,
+  threshold: number,
+): boolean {
+  const currentWeekStart = startOfIsoWeek(periodTo);
+  for (let back = weekCount - 1; back >= 0; back -= 1) {
+    const from = addUtcDays(currentWeekStart, -7 * back);
+    const to = addUtcDays(from, 6);
+    const inWeek = workouts.filter(
+      (task) =>
+        task.taskDate.getTime() >= from.getTime() &&
+        task.taskDate.getTime() <= to.getTime(),
+    );
+    const percent = compliancePercent(inWeek);
+    if (percent == null || percent <= threshold) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function resolveDirection(input: {
   workoutPercent: number | null;
   workoutSkipCount: number;
   hardenBlocked: boolean;
+  threeWeeksAbove90: boolean;
   feelings: Array<{ feeling: Feeling }>;
   hasPartial: boolean;
   hasHardFeeling: boolean;
 }): RecDirection | null {
+  // FT-14: ниже 50% за семь дней и не менее двух пропусков — облегчить.
   if (
-    (input.workoutPercent != null && input.workoutPercent < 50) ||
-    input.workoutSkipCount >= 2 ||
-    input.hasHardFeeling ||
-    input.hasPartial
+    input.workoutPercent != null &&
+    input.workoutPercent < 50 &&
+    input.workoutSkipCount >= 2
   ) {
+    return 'ease';
+  }
+
+  if (input.hasHardFeeling || input.hasPartial) {
     return 'ease';
   }
 
   const easyCount = input.feelings.filter(
     (item) => item.feeling === Feeling.easy,
   ).length;
-  const mostlyEasy =
-    input.feelings.length > 0 && easyCount > input.feelings.length / 2;
+  const markedEasy =
+    input.feelings.length > 0 && easyCount === input.feelings.length;
 
-  if (
-    !input.hardenBlocked &&
-    input.workoutPercent != null &&
-    input.workoutPercent >= 90 &&
-    mostlyEasy
-  ) {
+  // FT-14: три недели подряд выше 90% и самочувствие «легко» — усложнить.
+  if (!input.hardenBlocked && input.threeWeeksAbove90 && markedEasy) {
     return 'harden';
   }
 
@@ -296,11 +330,12 @@ function reasonForEase(
   workoutPercent: number | null,
   workoutSkipCount: number,
 ): string {
-  if (workoutSkipCount >= 2) {
-    return `За семь дней пропущено тренировок: ${workoutSkipCount}.`;
-  }
-  if (workoutPercent != null && workoutPercent < 50) {
-    return `Сводка по тренировкам ${workoutPercent}% — ниже 50%.`;
+  if (
+    workoutPercent != null &&
+    workoutPercent < 50 &&
+    workoutSkipCount >= 2
+  ) {
+    return `Сводка по тренировкам за семь дней ${workoutPercent}% (ниже 50%), пропусков: ${workoutSkipCount}.`;
   }
   return 'Самочувствие или частичные отметки указывают на перегруз.';
 }
