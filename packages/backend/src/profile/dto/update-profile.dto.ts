@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -48,4 +49,9 @@ export class UpdateProfileDto {
   @ArrayUnique()
   @IsString({ each: true })
   limitation_tags?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  free_note?: string | null;
 }
