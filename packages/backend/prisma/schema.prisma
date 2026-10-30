@@ -12,14 +12,32 @@ enum UserRole {
   admin
 }
 
+enum TrainingPlace {
+  home
+  gym
+}
+
+enum Gender {
+  male
+  female
+  other
+}
+
 model User {
-  id           Int      @id @default(autoincrement())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  displayName  String?  @map("display_name")
-  role         UserRole @default(user)
-  goal         Int?
-  level        Int?
+  id              Int            @id @default(autoincrement())
+  email           String         @unique
+  passwordHash    String         @map("password_hash")
+  displayName     String?        @map("display_name")
+  role            UserRole       @default(user)
+  goal            Int?
+  level           Int?
+  place           TrainingPlace?
+  workoutsPerWeek Int?           @map("workouts_per_week")
+  gender          Gender?
+  age             Int?
+  heightCm        Float?         @map("height_cm")
+  weightKg        Float?         @map("weight_kg")
+  limitationTags  String[]       @default([]) @map("limitation_tags")
 
   @@map("users")
 }
