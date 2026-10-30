@@ -2,6 +2,7 @@ import { Gender, TrainingPlace } from '@prisma/client';
 import {
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNumber,
@@ -54,4 +55,8 @@ export class UpdateProfileDto {
   @IsString()
   @MaxLength(2000)
   free_note?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  cloud_assistant_enabled?: boolean;
 }

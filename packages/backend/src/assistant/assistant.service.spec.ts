@@ -35,6 +35,7 @@ function userFixture(): User {
     weightKg: 73.4,
     limitationTags: ['колено'],
     freeNote: FREE_NOTE,
+    cloudAssistantEnabled: true,
   };
 }
 
@@ -184,6 +185,7 @@ describe('AssistantService', () => {
       sent,
       recommendationCreate,
       prisma,
+      users,
     };
   }
 
@@ -293,6 +295,25 @@ describe('AssistantService', () => {
     expect(response.assistant_reply.source).toBe(AssistantSource.rules);
     expect(response.summary_text).toContain('неделю');
     expect(response.summary_text).toContain('разошл');
+  });
+
+  it('does not call the model when the user disabled cloud assistant in settings', async () => {
+    const { service, complete, users } = setup({
+      isEnabled: true,
+      complete: async () => SAFE_LLM,
+    });
+    users.findById.mockResolvedValue({
+      ...userFixture(),
+      cloudAssistantEnabled: false,
+    });
+
+    const response = await service.analyze(1, {
+      period: 'week',
+      date: '2026-10-30',
+    });
+
+    expect(complete).not.toHaveBeenCalled();
+    expect(response.assistant_reply.source).toBe(AssistantSource.rules);
   });
 
   it('does not copy a week reply into a single diary row', async () => {

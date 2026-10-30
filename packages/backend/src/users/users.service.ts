@@ -20,6 +20,7 @@ export type UpdateProfileInput = {
   weightKg?: number | null;
   limitationTags?: string[];
   freeNote?: string | null;
+  cloudAssistantEnabled?: boolean;
 };
 
 @Injectable()
@@ -64,6 +65,9 @@ export class UsersService {
             ? { limitationTags: data.limitationTags }
             : {}),
           ...(data.freeNote !== undefined ? { freeNote: data.freeNote } : {}),
+          ...(data.cloudAssistantEnabled !== undefined
+            ? { cloudAssistantEnabled: data.cloudAssistantEnabled }
+            : {}),
         },
       })
       .catch((error: unknown) => {

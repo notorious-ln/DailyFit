@@ -18,6 +18,7 @@ export type ProfileResponse = {
   weight_kg: number | null;
   limitation_tags: string[];
   free_note: string | null;
+  cloud_assistant_enabled: boolean;
 };
 
 @Injectable()
@@ -48,6 +49,7 @@ export class ProfileService {
       limitationTags: dto.limitation_tags,
       freeNote:
         dto.free_note === undefined ? undefined : dto.free_note?.trim() || null,
+      cloudAssistantEnabled: dto.cloud_assistant_enabled,
     });
 
     if (!user) {
@@ -73,6 +75,7 @@ export class ProfileService {
       weight_kg: user.weightKg,
       limitation_tags: user.limitationTags,
       free_note: user.freeNote,
+      cloud_assistant_enabled: user.cloudAssistantEnabled,
     };
   }
 }

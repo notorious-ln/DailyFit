@@ -4,6 +4,7 @@ import {
   WorkoutTaskInput,
   absoluteVolumeDelta,
   buildWorkoutRecommendations,
+  consecutiveWeeksAbove,
   filterItemsByVolume,
   maxVolumeDeltaSets,
   workoutVolumeSets,
@@ -31,7 +32,7 @@ describe('rules-workout-recs', () => {
   const periodTo = today;
   const periodFrom = new Date('2026-10-24T00:00:00.000Z');
 
-  it('builds ease items with task, change and reason, and blocks harden after 2 skips', () => {
+  it('eases the week when seven-day workout percent is below 50 and skips are at least 2', () => {
     const recent = [
       workout({
         id: 1,
@@ -62,6 +63,7 @@ describe('rules-workout-recs', () => {
       periodTo,
       today,
       recentWorkouts: recent,
+      historyWorkouts: recent,
       weekWorkouts: [...recent, ...future],
       futureWorkouts: future,
       feelings: [{ feeling: Feeling.easy }],
@@ -75,7 +77,8 @@ describe('rules-workout-recs', () => {
       expect(item.description).toContain('Задача:');
       expect(item.description).toContain('Изменение:');
       expect(item.description).toContain('Причина:');
-      expect(item.description).toMatch(/пропущено тренировок: 2/);
+      expect(item.description).toMatch(/ниже 50%/);
+      expect(item.description).toMatch(/пропусков: 2/);
     }
     expect(
       items.some((item) => item.change.kind === 'simplify_exercise'),
@@ -84,6 +87,55 @@ describe('rules-workout-recs', () => {
       items.find((item) => item.change.kind === 'simplify_exercise')?.change
         .toName,
     ).toBe(SIMPLER_EXERCISE['Отжимания с паузой']);
+  });
+
+  it('does not ease only from skips when seven-day percent stays at or above 50', () => {
+    const recent = [
+      workout({
+        id: 1,
+        taskDate: new Date('2026-10-24T00:00:00.000Z'),
+        status: TaskStatus.done,
+      }),
+      workout({
+        id: 2,
+        taskDate: new Date('2026-10-25T00:00:00.000Z'),
+        status: TaskStatus.done,
+      }),
+      workout({
+        id: 3,
+        taskDate: new Date('2026-10-26T00:00:00.000Z'),
+        status: TaskStatus.done,
+      }),
+      workout({
+        id: 4,
+        taskDate: new Date('2026-10-27T00:00:00.000Z'),
+        status: TaskStatus.skipped,
+      }),
+      workout({
+        id: 5,
+        taskDate: new Date('2026-10-28T00:00:00.000Z'),
+        status: TaskStatus.skipped,
+      }),
+    ];
+    const future = [
+      workout({
+        id: 10,
+        taskDate: new Date('2026-10-31T00:00:00.000Z'),
+      }),
+    ];
+
+    const items = buildWorkoutRecommendations({
+      periodFrom,
+      periodTo,
+      today,
+      recentWorkouts: recent,
+      historyWorkouts: recent,
+      weekWorkouts: [...recent, ...future],
+      futureWorkouts: future,
+      feelings: [{ feeling: Feeling.normal }],
+    });
+
+    expect(items).toHaveLength(0);
   });
 
   it('does not invent a simplify target outside the dictionary', () => {
@@ -114,6 +166,7 @@ describe('rules-workout-recs', () => {
       periodTo,
       today,
       recentWorkouts: recent,
+      historyWorkouts: recent,
       weekWorkouts: [...recent, ...future],
       futureWorkouts: future,
       feelings: [{ feeling: Feeling.hard }],
@@ -174,15 +227,20 @@ describe('rules-workout-recs', () => {
     );
   });
 
-  it('proposes a slight harden only when compliance is high and feeling is easy', () => {
-    const recent = [
+  it('proposes a slight harden only after three weeks above 90 with easy feeling', () => {
+    const history = [
       workout({
         id: 1,
-        taskDate: new Date('2026-10-26T00:00:00.000Z'),
+        taskDate: new Date('2026-10-14T00:00:00.000Z'),
         status: TaskStatus.done,
       }),
       workout({
         id: 2,
+        taskDate: new Date('2026-10-21T00:00:00.000Z'),
+        status: TaskStatus.done,
+      }),
+      workout({
+        id: 3,
         taskDate: new Date('2026-10-28T00:00:00.000Z'),
         status: TaskStatus.done,
       }),
@@ -197,12 +255,15 @@ describe('rules-workout-recs', () => {
       }),
     ];
 
+    expect(consecutiveWeeksAbove(history, periodTo, 3, 90)).toBe(true);
+
     const items = buildWorkoutRecommendations({
       periodFrom,
       periodTo,
       today,
-      recentWorkouts: recent,
-      weekWorkouts: [...recent, ...future],
+      recentWorkouts: [history[2]],
+      historyWorkouts: history,
+      weekWorkouts: [history[2], ...future],
       futureWorkouts: future,
       feelings: [{ feeling: Feeling.easy }, { feeling: Feeling.easy }],
     });
@@ -211,5 +272,45 @@ describe('rules-workout-recs', () => {
     expect(items[0].change.kind).toBe('sets');
     expect(items[0].change.direction).toBe('harden');
     expect(items[0].change.volumeDeltaSets).toBe(1);
+    expect(items[0].description).toMatch(/Три недели подряд/);
+  });
+
+  it('does not harden when only one or two weeks are above 90', () => {
+    const history = [
+      workout({
+        id: 1,
+        taskDate: new Date('2026-10-14T00:00:00.000Z'),
+        status: TaskStatus.skipped,
+      }),
+      workout({
+        id: 2,
+        taskDate: new Date('2026-10-21T00:00:00.000Z'),
+        status: TaskStatus.done,
+      }),
+      workout({
+        id: 3,
+        taskDate: new Date('2026-10-28T00:00:00.000Z'),
+        status: TaskStatus.done,
+      }),
+    ];
+    const future = [
+      workout({
+        id: 10,
+        taskDate: new Date('2026-10-31T00:00:00.000Z'),
+      }),
+    ];
+
+    const items = buildWorkoutRecommendations({
+      periodFrom,
+      periodTo,
+      today,
+      recentWorkouts: [history[2]],
+      historyWorkouts: history,
+      weekWorkouts: [history[2], ...future],
+      futureWorkouts: future,
+      feelings: [{ feeling: Feeling.easy }],
+    });
+
+    expect(items).toHaveLength(0);
   });
 });
