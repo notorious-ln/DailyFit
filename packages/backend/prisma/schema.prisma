@@ -23,6 +23,17 @@ enum Gender {
   other
 }
 
+enum TemplateType {
+  workout
+  meal
+}
+
+enum TaskStatus {
+  done
+  partial
+  skipped
+}
+
 model User {
   id              Int            @id @default(autoincrement())
   email           String         @unique
@@ -38,6 +49,54 @@ model User {
   heightCm        Float?         @map("height_cm")
   weightKg        Float?         @map("weight_kg")
   limitationTags  String[]       @default([]) @map("limitation_tags")
+  activePlans     ActivePlan[]
 
   @@map("users")
+}
+
+model Template {
+  id         Int          @id @default(autoincrement())
+  type       TemplateType
+  title      String
+  levelPlace String       @map("level_place")
+  bodyJson   Json         @map("body_json")
+  isVisible  Boolean      @default(true) @map("is_visible")
+  activePlans ActivePlan[]
+
+  @@map("templates")
+}
+
+model ActivePlan {
+  id            Int          @id @default(autoincrement())
+  userId        Int          @map("user_id")
+  templateId    Int          @map("template_id")
+  type          TemplateType
+  title         String
+  levelPlace    String       @map("level_place")
+  bodyJson      Json         @map("body_json")
+  isActive      Boolean      @default(true) @map("is_active")
+  startedAt     DateTime     @default(now()) @map("started_at")
+  endedAt       DateTime?    @map("ended_at")
+  dailyCalories Int?         @map("daily_calories")
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template      Template     @relation(fields: [templateId], references: [id])
+  dayTasks      DayTask[]
+
+  @@index([userId, type, isActive])
+  @@map("active_plans")
+}
+
+model DayTask {
+  id          Int         @id @default(autoincrement())
+  planId      Int         @map("plan_id")
+  taskDate    DateTime    @map("task_date") @db.Date
+  kind        String
+  title       String
+  status      TaskStatus?
+  detailsJson Json?       @map("details_json")
+  completedAt DateTime?   @map("completed_at")
+  plan        ActivePlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, taskDate])
+  @@map("day_tasks")
 }
