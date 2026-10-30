@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AssistantModule } from './assistant/assistant.module';
 import { AuthModule } from './auth/auth.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { DayModule } from './day/day.module';
@@ -25,6 +26,7 @@ import { UsersModule } from './users/users.module';
     DayModule,
     DiaryModule,
     ProgressModule,
+    AssistantModule,
   ],
 })
 export class AppModule {}

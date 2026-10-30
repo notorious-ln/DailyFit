@@ -19,6 +19,7 @@ export type UpdateProfileInput = {
   heightCm?: number | null;
   weightKg?: number | null;
   limitationTags?: string[];
+  freeNote?: string | null;
 };
 
 @Injectable()
@@ -62,6 +63,7 @@ export class UsersService {
           ...(data.limitationTags !== undefined
             ? { limitationTags: data.limitationTags }
             : {}),
+          ...(data.freeNote !== undefined ? { freeNote: data.freeNote } : {}),
         },
       })
       .catch((error: unknown) => {

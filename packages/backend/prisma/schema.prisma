@@ -40,6 +40,16 @@ enum Feeling {
   hard
 }
 
+enum AnalyzePeriod {
+  day
+  week
+}
+
+enum AssistantSource {
+  llm
+  rules
+}
+
 model User {
   id              Int            @id @default(autoincrement())
   email           String         @unique
@@ -55,8 +65,10 @@ model User {
   heightCm        Float?         @map("height_cm")
   weightKg        Float?         @map("weight_kg")
   limitationTags  String[]       @default([]) @map("limitation_tags")
+  freeNote        String?        @map("free_note")
   activePlans     ActivePlan[]
   diaryNotes      DiaryNote[]
+  assistantReplies AssistantReply[]
 
   @@map("users")
 }
@@ -120,4 +132,20 @@ model DiaryNote {
 
   @@unique([userId, noteDate])
   @@map("diary_notes")
+}
+
+model AssistantReply {
+  id         Int             @id @default(autoincrement())
+  userId     Int             @map("user_id")
+  period     AnalyzePeriod
+  periodFrom DateTime        @map("period_from") @db.Date
+  periodTo   DateTime        @map("period_to") @db.Date
+  role       String          @default("assistant")
+  text       String
+  source     AssistantSource
+  createdAt  DateTime        @default(now()) @map("created_at")
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, periodFrom])
+  @@map("assistant_replies")
 }

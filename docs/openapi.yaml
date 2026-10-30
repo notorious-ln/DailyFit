@@ -342,9 +342,16 @@ paths:
       tags: [Assistant]
       summary: Запросить разбор дня или недели
       description: |
-        Собирает безопасную сводку (свободная пометка профиля не уходит).
-        При включённом облачном помощнике — LLM, иначе / при сбое — rule engine.
-        Опасные правки отсекаются; допустимые создаются как черновик рекомендации.
+        Явный запрос разбора дня или недели (FT-10).
+        Во внешнюю модель уходят цель, уровень, метки ограничений, сводка процентов,
+        число пропусков, самочувствие, параметры активного плана и комментарий
+        пользователя за день. Комментарий уходит только потому, что разбор —
+        отдельное действие; экран показывает screen_notice.
+        Свободная пометка профиля не уходит.
+        Текст объясняет, что получилось и где факт разошёлся с планом.
+        В нём нет диагноза и нет обещания изменить вес к дате.
+        Комментарий сохраняется репликой помощника отдельно от фактов дневника.
+        При включённом облачном помощнике — LLM, иначе и при сбое или опасном тексте — правила.
       operationId: analyze
       requestBody:
         required: true
@@ -636,6 +643,10 @@ components:
           items:
             type: string
           description: Метки ограничений
+        free_note:
+          type: string
+          nullable: true
+          description: Свободная пометка профиля. Во внешнюю модель не уходит.
 
     Profile:
       allOf:
@@ -667,6 +678,10 @@ components:
               items:
                 type: string
               default: []
+            free_note:
+              type: string
+              nullable: true
+              description: Свободная пометка профиля. Во внешнюю модель не уходит.
 
     TemplateType:
       type: string
@@ -944,15 +959,70 @@ components:
 
     AnalyzeResponse:
       type: object
+      required: [summary_text, assistant_reply, diary_facts, screen_notice]
       properties:
         summary_text:
           type: string
-          description: Комментарий помощника
+          description: Комментарий помощника простым языком
+        assistant_reply:
+          $ref: '#/components/schemas/AssistantReply'
+        diary_facts:
+          type: array
+          description: Факты дневника без текста помощника
+          items:
+            $ref: '#/components/schemas/DiaryFact'
+        screen_notice:
+          type: string
+          description: |
+            Текст экрана: комментарий за день уходит только потому,
+            что разбор запрошен отдельно. Свободная пометка профиля не уходит.
         recommendation:
           allOf:
             - $ref: '#/components/schemas/Recommendation'
           nullable: true
-          description: null, если все опасные пункты отсечены
+          description: null, пока разбор отдаёт только комментарий
+
+    AssistantReply:
+      type: object
+      required: [id, role, text, period, period_from, period_to, source, created_at]
+      properties:
+        id:
+          type: integer
+        role:
+          type: string
+          enum: [assistant]
+          description: Реплика помощника, не факт дневника
+        text:
+          type: string
+        period:
+          $ref: '#/components/schemas/AnalyzePeriod'
+        period_from:
+          type: string
+          format: date
+        period_to:
+          type: string
+          format: date
+        source:
+          type: string
+          enum: [llm, rules]
+        created_at:
+          type: string
+          format: date-time
+
+    DiaryFact:
+      type: object
+      properties:
+        note_date:
+          type: string
+          format: date
+        feeling:
+          $ref: '#/components/schemas/Feeling'
+        weight_kg:
+          type: number
+          nullable: true
+        user_comment:
+          type: string
+          nullable: true
 
     RecommendationStatus:
       type: string

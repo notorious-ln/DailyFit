@@ -17,6 +17,7 @@ export type ProfileResponse = {
   height_cm: number | null;
   weight_kg: number | null;
   limitation_tags: string[];
+  free_note: string | null;
 };
 
 @Injectable()
@@ -31,7 +32,10 @@ export class ProfileService {
     return this.toProfile(user);
   }
 
-  async update(userId: number, dto: UpdateProfileDto): Promise<ProfileResponse> {
+  async update(
+    userId: number,
+    dto: UpdateProfileDto,
+  ): Promise<ProfileResponse> {
     const user = await this.usersService.updateProfile(userId, {
       goal: dto.goal,
       level: dto.level,
@@ -42,6 +46,8 @@ export class ProfileService {
       heightCm: dto.height_cm,
       weightKg: dto.weight_kg,
       limitationTags: dto.limitation_tags,
+      freeNote:
+        dto.free_note === undefined ? undefined : dto.free_note?.trim() || null,
     });
 
     if (!user) {
@@ -66,6 +72,7 @@ export class ProfileService {
       height_cm: user.heightCm,
       weight_kg: user.weightKg,
       limitation_tags: user.limitationTags,
+      free_note: user.freeNote,
     };
   }
 }
