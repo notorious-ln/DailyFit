@@ -23,6 +23,14 @@ export type ProfileResponse = {
 export class ProfileService {
   constructor(private readonly usersService: UsersService) {}
 
+  async get(userId: number): Promise<ProfileResponse> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException({ message: 'Пользователь не найден' });
+    }
+    return this.toProfile(user);
+  }
+
   async update(userId: number, dto: UpdateProfileDto): Promise<ProfileResponse> {
     const user = await this.usersService.updateProfile(userId, {
       goal: dto.goal,

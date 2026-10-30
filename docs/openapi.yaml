@@ -88,6 +88,19 @@ paths:
                 $ref: '#/components/schemas/Error'
 
   /profile:
+    get:
+      tags: [Profile]
+      summary: Получить профиль и цель
+      operationId: getProfile
+      responses:
+        '200':
+          description: Текущий профиль пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     put:
       tags: [Profile]
       summary: Сохранить профиль и цель
@@ -630,11 +643,15 @@ components:
         - type: object
           properties:
             place:
-              $ref: '#/components/schemas/TrainingPlace'
+              allOf:
+                - $ref: '#/components/schemas/TrainingPlace'
+              nullable: true
             workouts_per_week:
               type: integer
+              nullable: true
             gender:
               type: string
+              enum: [male, female, other]
               nullable: true
             age:
               type: integer
@@ -649,6 +666,7 @@ components:
               type: array
               items:
                 type: string
+              default: []
 
     TemplateType:
       type: string
