@@ -33,7 +33,7 @@ const NAV: Array<{
   { id: 'plans', label: 'Планы', icon: 'clipboard', ready: true },
   { id: 'progress', label: 'Прогресс', icon: 'chart', ready: true },
   { id: 'profile', label: 'Профиль', icon: 'user', ready: true },
-  { id: 'diary', label: 'Дневник', icon: 'book' },
+  { id: 'diary', label: 'Дневник', icon: 'book', ready: true },
   { id: 'templates', label: 'Шаблоны', icon: 'templates', adminOnly: true },
 ];
 

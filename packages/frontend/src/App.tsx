@@ -10,6 +10,7 @@ import {
 } from './auth/session';
 import type { NavId } from './components/AppShell';
 import { AuthPage } from './pages/AuthPage';
+import { DiaryPage } from './pages/DiaryPage';
 import { PlansPage } from './pages/PlansPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { ProfileSetupPage } from './pages/ProfileSetupPage';
@@ -153,6 +154,16 @@ export function App() {
         onLogout={handleLogout}
         onNavigate={setRoute}
         onProfileChange={handleProfileChange}
+      />
+    );
+  }
+
+  if (route === 'diary') {
+    return (
+      <DiaryPage
+        user={profile}
+        onLogout={handleLogout}
+        onNavigate={setRoute}
       />
     );
   }

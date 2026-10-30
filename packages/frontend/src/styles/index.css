@@ -1958,6 +1958,210 @@ button:disabled {
   grid-template-columns: repeat(2, 1fr);
 }
 
+.diary-page {
+  padding: 28px 28px 40px;
+  display: grid;
+  gap: 18px;
+  max-width: 1100px;
+}
+
+.diary-header .page-title {
+  margin: 0;
+  font-size: 34px;
+}
+
+.diary-lead {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+  max-width: 560px;
+}
+
+.diary-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.8fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.diary-week-card,
+.diary-summary-card {
+  display: grid;
+  gap: 14px;
+}
+
+.diary-week-head h2,
+.diary-summary-card h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.diary-week-head p,
+.diary-summary-card > p {
+  margin: 4px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.diary-day-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.diary-day-row {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid #eef2f6;
+  background: transparent;
+  padding: 14px 4px;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 120px 18px;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  color: #0f172a;
+}
+
+.diary-day-row:hover {
+  background: #f8fafc;
+}
+
+.diary-date-box {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: #eef2f6;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 1px;
+}
+
+.diary-date-box strong {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.diary-date-box span {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.diary-day-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.diary-day-main strong {
+  font-size: 14px;
+}
+
+.diary-day-main span {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diary-day-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.diary-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #e8eef3;
+  overflow: hidden;
+}
+
+.diary-progress-fill {
+  height: 100%;
+  background: #0f766e;
+  border-radius: inherit;
+}
+
+.diary-day-progress em {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+  color: #475569;
+  min-width: 36px;
+  text-align: right;
+}
+
+.diary-summary-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: #f3e8ff;
+  color: #7e22ce;
+  display: grid;
+  place-items: center;
+}
+
+.diary-summary-stats {
+  display: grid;
+  gap: 10px;
+}
+
+.diary-summary-stats > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #eef2f6;
+}
+
+.diary-summary-stats > div:last-child {
+  border-bottom: 1px solid #eef2f6;
+}
+
+.diary-summary-stats span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.diary-summary-stats strong {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.analyze-week-button {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: #f3e8ff;
+  color: #6b21a8;
+  font-size: 13px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.analyze-week-button:hover:not(:disabled) {
+  background: #ede9fe;
+}
+
+.diary-day-modal {
+  width: min(100%, 480px);
+}
+
 @media (max-width: 1050px) {
   .auth-visual {
     padding: 38px;
@@ -1986,6 +2190,10 @@ button:disabled {
   }
 
   .profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .diary-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -2034,6 +2242,14 @@ button:disabled {
 
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .diary-day-row {
+    grid-template-columns: 48px minmax(0, 1fr) 18px;
+  }
+
+  .diary-day-progress {
+    display: none;
   }
 }
 
@@ -2132,13 +2348,15 @@ button:disabled {
 
   .plans-page,
   .progress-page,
-  .profile-page {
+  .profile-page,
+  .diary-page {
     padding: 18px 14px 28px;
   }
 
   .plans-header .page-title,
   .progress-header .page-title,
-  .profile-header .page-title {
+  .profile-header .page-title,
+  .diary-header .page-title {
     font-size: 26px;
   }
 
