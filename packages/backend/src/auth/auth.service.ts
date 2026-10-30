@@ -5,8 +5,9 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { User } from '@prisma/client';
+import { JournalEvent, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { JournalService } from '../journal/journal.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -33,6 +34,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly journal: JournalService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
@@ -59,6 +61,10 @@ export class AuthService {
     }
 
     this.logger.log(`регистрация userId=${user.id} email=${user.email}`);
+    await this.journal.record({
+      userId: user.id,
+      event: JournalEvent.register,
+    });
     return this.buildAuthResponse(user);
   }
 
@@ -82,6 +88,10 @@ export class AuthService {
     }
 
     this.logger.log(`вход userId=${user.id} email=${user.email}`);
+    await this.journal.record({
+      userId: user.id,
+      event: JournalEvent.login,
+    });
     return this.buildAuthResponse(user);
   }
 

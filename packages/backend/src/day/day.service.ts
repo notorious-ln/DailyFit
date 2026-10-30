@@ -8,12 +8,14 @@ import {
 import {
   ActivePlan,
   DayTask,
+  JournalEvent,
   Prisma,
   TaskStatus,
   TemplateType,
 } from '@prisma/client';
 import { asObject } from '../catalog/catalog.service';
 import { compliancePercent } from '../compliance/compliance.util';
+import { JournalService } from '../journal/journal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   addUtcDays,
@@ -61,7 +63,10 @@ type MealItem = {
 export class DayService {
   private readonly logger = new Logger(DayService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly journal: JournalService,
+  ) {}
 
   async getDay(userId: number, dateParam: string): Promise<DayView> {
     const date = this.parseDate(dateParam);
@@ -104,17 +109,31 @@ export class DayService {
       }
     }
 
-    await this.prisma.$transaction(
-      dto.tasks.map((item) =>
-        this.prisma.dayTask.update({
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of dto.tasks) {
+        await tx.dayTask.update({
           where: { id: item.id },
           data: {
             status: item.status,
             completedAt: now,
           },
-        }),
-      ),
-    );
+        });
+      }
+      await this.journal.record(
+        {
+          userId,
+          event: JournalEvent.task_mark_changed,
+          details: {
+            date: dateKey(date),
+            tasks: dto.tasks.map((item) => ({
+              task_id: item.id,
+              status: item.status,
+            })),
+          },
+        },
+        tx,
+      );
+    });
 
     this.logger.log(
       `отметки дня user=${userId} date=${dateKey(date)} updates=${dto.tasks.length}`,

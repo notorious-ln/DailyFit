@@ -5,7 +5,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { DayTask, Prisma, RecommendationStatus } from '@prisma/client';
+import {
+  DayTask,
+  JournalEvent,
+  Prisma,
+  RecommendationStatus,
+} from '@prisma/client';
+import { JournalService } from '../journal/journal.service';
 import {
   extractMeals,
   minCaloriesFloor,
@@ -43,6 +49,7 @@ export class RecommendationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
+    private readonly journal: JournalService,
   ) {}
 
   async decide(
@@ -68,6 +75,17 @@ export class RecommendationsService {
           where: { id },
           data: { status: RecommendationStatus.rejected },
         });
+        await this.journal.record(
+          {
+            userId,
+            event: JournalEvent.recommendation_rejected,
+            details: {
+              recommendation_id: id,
+              status: RecommendationStatus.rejected,
+            },
+          },
+          tx,
+        );
         this.logger.log(`отклонение рекомендации user=${userId} id=${id}`);
         return rejected;
       });
@@ -155,6 +173,18 @@ export class RecommendationsService {
             })) as Prisma.InputJsonValue,
           },
         });
+        await this.journal.record(
+          {
+            userId,
+            event: JournalEvent.recommendation_accepted,
+            details: {
+              recommendation_id: id,
+              status,
+              selected_count: selected.length,
+            },
+          },
+          tx,
+        );
         this.logger.log(
           `принятие рекомендации user=${userId} id=${id} status=${saved.status} items=${selected.length}`,
         );

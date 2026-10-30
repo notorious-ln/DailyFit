@@ -5,8 +5,9 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ActivePlan, Prisma, TemplateType } from '@prisma/client';
+import { ActivePlan, JournalEvent, Prisma, TemplateType } from '@prisma/client';
 import { asObject } from '../catalog/catalog.service';
+import { JournalService } from '../journal/journal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { calculateDailyCalories } from './calorie-calculator';
@@ -56,6 +57,7 @@ export class PlansService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
+    private readonly journal: JournalService,
   ) {}
 
   async activateWorkout(
@@ -116,6 +118,18 @@ export class PlansService {
       });
 
       await this.generateFutureWorkoutTasks(tx, created, today, occupiedDates);
+      await this.journal.record(
+        {
+          userId,
+          event: JournalEvent.plan_activated,
+          details: {
+            plan_id: created.id,
+            template_id: template.id,
+            plan_type: TemplateType.workout,
+          },
+        },
+        tx,
+      );
 
       return created;
     });
@@ -206,6 +220,18 @@ export class PlansService {
         today,
         dailyCalories,
         occupiedDates,
+      );
+      await this.journal.record(
+        {
+          userId,
+          event: JournalEvent.plan_activated,
+          details: {
+            plan_id: created.id,
+            template_id: template.id,
+            plan_type: TemplateType.meal,
+          },
+        },
+        tx,
       );
 
       return created;
