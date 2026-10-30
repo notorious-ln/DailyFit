@@ -63,11 +63,14 @@ export class RecommendationsService {
     }
 
     if (dto.action === 'reject') {
-      const updated = await this.prisma.recommendation.update({
-        where: { id },
-        data: { status: RecommendationStatus.rejected },
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const rejected = await tx.recommendation.update({
+          where: { id },
+          data: { status: RecommendationStatus.rejected },
+        });
+        this.logger.log(`отклонение рекомендации user=${userId} id=${id}`);
+        return rejected;
       });
-      this.logger.log(`отклонение рекомендации user=${userId} id=${id}`);
       return toRecommendationResponse(updated);
     }
 
@@ -88,7 +91,7 @@ export class RecommendationsService {
           where: {
             kind: 'workout',
             taskDate: { gte: weekStart, lte: weekEnd },
-            plan: { userId },
+            plan: { userId, isActive: true },
           },
         });
         const baseVolume = workoutVolumeSets(
@@ -142,7 +145,7 @@ export class RecommendationsService {
             ? RecommendationStatus.accepted
             : RecommendationStatus.partially_accepted;
 
-        return tx.recommendation.update({
+        const saved = await tx.recommendation.update({
           where: { id },
           data: {
             status,
@@ -152,11 +155,12 @@ export class RecommendationsService {
             })) as Prisma.InputJsonValue,
           },
         });
+        this.logger.log(
+          `принятие рекомендации user=${userId} id=${id} status=${saved.status} items=${selected.length}`,
+        );
+        return saved;
       });
 
-      this.logger.log(
-        `принятие рекомендации user=${userId} id=${id} status=${updated.status} items=${selected.length}`,
-      );
       return toRecommendationResponse(updated);
     } catch (error) {
       this.logger.warn(
@@ -186,7 +190,7 @@ export class RecommendationsService {
       where: {
         id: item.change.taskId,
         kind: 'workout',
-        plan: { userId },
+        plan: { userId, isActive: true },
       },
     });
     if (!task) {
