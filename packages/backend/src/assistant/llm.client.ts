@@ -10,40 +10,36 @@ const SYSTEM_PROMPT = [
   'Ответ — 2–5 коротких предложений на русском.',
 ].join(' ');
 
+const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
+const DEFAULT_MODEL = 'qwen2.5';
+const DEFAULT_TIMEOUT_MS = 60_000;
+
 @Injectable()
 export class LlmClient {
   private readonly logger = new Logger(LlmClient.name);
 
   isEnabled(): boolean {
-    return (
-      process.env.CLOUD_ASSISTANT_ENABLED === 'true' &&
-      Boolean(process.env.LLM_API_KEY) &&
-      Boolean(process.env.LLM_BASE_URL)
-    );
+    return process.env.CLOUD_ASSISTANT_ENABLED === 'true';
   }
 
   async complete(payload: LlmPayload): Promise<string> {
-    const baseUrl = process.env.LLM_BASE_URL?.replace(/\/$/, '');
-    const apiKey = process.env.LLM_API_KEY;
-    if (!baseUrl || !apiKey) {
-      throw new Error('LLM is not configured');
-    }
-
-    const timeoutMs = Number(process.env.LLM_TIMEOUT_MS ?? 8000);
+    const baseUrl = (
+      process.env.LLM_BASE_URL?.trim() || DEFAULT_BASE_URL
+    ).replace(/\/$/, '');
+    const model = process.env.LLM_MODEL?.trim() || DEFAULT_MODEL;
+    const timeoutMs = Number(process.env.LLM_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const response = await fetch(`${baseUrl}/api/chat`, {
         method: 'POST',
         signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: process.env.LLM_MODEL ?? 'gpt-4o-mini',
-          temperature: 0.3,
+          model,
+          stream: false,
+          options: { temperature: 0.3 },
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: JSON.stringify(payload) },
@@ -56,9 +52,9 @@ export class LlmClient {
       }
 
       const body = (await response.json()) as {
-        choices?: Array<{ message?: { content?: unknown } }>;
+        message?: { content?: unknown };
       };
-      const content = body.choices?.[0]?.message?.content;
+      const content = body.message?.content;
       if (typeof content !== 'string' || !content.trim()) {
         throw new Error('LLM empty content');
       }
