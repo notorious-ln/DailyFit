@@ -169,16 +169,43 @@ describe('RecommendationsService', () => {
   }
 
   it('rejects a draft without changing the plan', async () => {
-    const { service, prisma, recommendationUpdate } = setup();
+    const { service, prisma, recommendationUpdate, dayTaskUpdate } = setup();
 
     const result = await service.decide(1, 7, { action: 'reject' });
 
     expect(result.status).toBe(RecommendationStatus.rejected);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalled();
     expect(recommendationUpdate).toHaveBeenCalledWith({
       where: { id: 7 },
       data: { status: RecommendationStatus.rejected },
     });
+    expect(dayTaskUpdate).not.toHaveBeenCalled();
+  });
+
+  it('accepts all items when selectedItems is omitted', async () => {
+    const { service, dayTaskUpdate, recommendationUpdate } = setup();
+
+    const result = await service.decide(1, 7, { action: 'accept' });
+
+    expect(result.status).toBe(RecommendationStatus.accepted);
+    expect(dayTaskUpdate).toHaveBeenCalled();
+    expect(recommendationUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: RecommendationStatus.accepted,
+        }),
+      }),
+    );
+  });
+
+  it('refuses a recommendation that is no longer a draft', async () => {
+    const { service, prisma, recommendation } = setup();
+    recommendation.status = RecommendationStatus.accepted;
+
+    await expect(
+      service.decide(1, 7, { action: 'accept' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('accepts selected items and updates a future unmarked task', async () => {
@@ -199,7 +226,7 @@ describe('RecommendationsService', () => {
   });
 
   it('does not rewrite a past or already marked task', async () => {
-    const { service, tx } = setup();
+    const { service, tx, recommendationUpdate } = setup();
     tx.dayTask.findFirst.mockResolvedValue({
       id: 20,
       planId: 4,
@@ -216,6 +243,7 @@ describe('RecommendationsService', () => {
     await expect(
       service.decide(1, 7, { action: 'accept', selectedItems: ['rec-1'] }),
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(recommendationUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects accept when selected items exceed the 15% volume limit', async () => {
