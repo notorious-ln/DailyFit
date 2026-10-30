@@ -173,12 +173,26 @@ const templates = [
     title: 'Сбалансированное питание',
     levelPlace: '1/home',
     bodyJson: {
-      description: 'Простой рацион с 3 приёмами пищи и перекусом.',
+      description: 'Простой рацион для новичка: 3 приёма пищи и перекус.',
       meals: [
         { name: 'Завтрак', examples: ['Овсянка', 'Яйца', 'Фрукт'] },
         { name: 'Обед', examples: ['Курица', 'Крупа', 'Овощи'] },
         { name: 'Ужин', examples: ['Рыба', 'Салат', 'Творог'] },
         { name: 'Перекус', examples: ['Йогурт', 'Орехи'] },
+      ],
+    },
+  },
+  {
+    type: TemplateType.meal,
+    title: 'Лёгкий дефицит дома',
+    levelPlace: '1/gym',
+    bodyJson: {
+      description: 'Рацион с контролем порций для снижения веса.',
+      meals: [
+        { name: 'Завтрак', examples: ['Творог 5%', 'Ягоды', 'Чай'] },
+        { name: 'Обед', examples: ['Индейка', 'Гречка', 'Овощи'] },
+        { name: 'Ужин', examples: ['Рыба на пару', 'Салат'] },
+        { name: 'Перекус', examples: ['Яблоко', 'Кефир'] },
       ],
     },
   },
@@ -196,17 +210,35 @@ const templates = [
       ],
     },
   },
+  {
+    type: TemplateType.meal,
+    title: 'Домашний набор',
+    levelPlace: '2/home',
+    bodyJson: {
+      description: 'Калорийный рацион для набора при домашних тренировках.',
+      meals: [
+        { name: 'Завтрак', examples: ['Овсянка на молоке', 'Арахисовая паста', 'Банан'] },
+        { name: 'Обед', examples: ['Паста', 'Курица', 'Сыр'] },
+        { name: 'Ужин', examples: ['Рис', 'Фарш', 'Овощи'] },
+        { name: 'Перекус', examples: ['Протеин', 'Орехи', 'Бутерброд'] },
+      ],
+    },
+  },
 ];
 
 async function main() {
-  const existing = await prisma.template.count();
-  if (existing > 0) {
-    console.log(`Seed skipped: already have ${existing} templates`);
-    return;
+  let created = 0;
+  for (const template of templates) {
+    const existing = await prisma.template.findFirst({
+      where: { type: template.type, title: template.title },
+    });
+    if (existing) {
+      continue;
+    }
+    await prisma.template.create({ data: template });
+    created += 1;
   }
-
-  await prisma.template.createMany({ data: templates });
-  console.log(`Seeded ${templates.length} templates`);
+  console.log(`Seeded ${created} new templates (${templates.length} defined)`);
 }
 
 main()
