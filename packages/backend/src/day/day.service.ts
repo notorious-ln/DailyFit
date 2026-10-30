@@ -13,6 +13,7 @@ import {
   TemplateType,
 } from '@prisma/client';
 import { asObject } from '../catalog/catalog.service';
+import { compliancePercent } from '../compliance/compliance.util';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   addUtcDays,
@@ -54,12 +55,6 @@ type WorkoutDay = {
 type MealItem = {
   name?: string;
   examples?: string[];
-};
-
-const STATUS_SCORE: Record<TaskStatus, number> = {
-  [TaskStatus.done]: 100,
-  [TaskStatus.partial]: 50,
-  [TaskStatus.skipped]: 0,
 };
 
 @Injectable()
@@ -292,21 +287,4 @@ function asObjectOrNull(value: Prisma.JsonValue | null): Record<string, unknown>
     return null;
   }
   return asObject(value);
-}
-
-function compliancePercent(
-  tasks: Array<{ status: TaskStatus | null }>,
-): number | null {
-  if (tasks.length === 0) {
-    return null;
-  }
-
-  const total = tasks.reduce((sum, task) => {
-    if (task.status == null) {
-      return sum;
-    }
-    return sum + STATUS_SCORE[task.status];
-  }, 0);
-
-  return Math.round((total / tasks.length) * 10) / 10;
 }

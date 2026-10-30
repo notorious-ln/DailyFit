@@ -7,6 +7,7 @@ import { DiaryModule } from './diary/diary.module';
 import { PlansModule } from './plans/plans.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProfileModule } from './profile/profile.module';
+import { ProgressModule } from './progress/progress.module';
 import { UsersModule } from './users/users.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { UsersModule } from './users/users.module';
     PlansModule,
     DayModule,
     DiaryModule,
+    ProgressModule,
   ],
 })
 export class AppModule {}
