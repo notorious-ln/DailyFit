@@ -57,6 +57,20 @@ enum RecommendationStatus {
   rejected
 }
 
+enum JournalEvent {
+  register
+  login
+  plan_activated
+  task_mark_changed
+  analysis_requested
+  recommendation_accepted
+  recommendation_rejected
+  external_call_error
+  template_created
+  template_updated
+  template_hidden
+}
+
 model User {
   id              Int            @id @default(autoincrement())
   email           String         @unique
@@ -78,6 +92,7 @@ model User {
   diaryNotes      DiaryNote[]
   assistantReplies AssistantReply[]
   recommendations Recommendation[]
+  journalEntries  JournalEntry[]
 
   @@map("users")
 }
@@ -173,4 +188,17 @@ model Recommendation {
 
   @@index([userId, createdAt])
   @@map("recommendations")
+}
+
+model JournalEntry {
+  id        Int          @id @default(autoincrement())
+  userId    Int          @map("user_id")
+  event     JournalEvent
+  details   Json         @default("{}")
+  createdAt DateTime     @default(now()) @map("created_at")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([event, createdAt])
+  @@map("journal_entries")
 }

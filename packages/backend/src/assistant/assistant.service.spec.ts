@@ -1,6 +1,7 @@
 import {
   AssistantSource,
   Feeling,
+  JournalEvent,
   RecommendationStatus,
   TaskStatus,
   TemplateType,
@@ -171,10 +172,20 @@ describe('AssistantService', () => {
       complete,
     } as unknown as LlmClient;
 
+    const journalRecords: Array<{ event: JournalEvent; details?: unknown }> =
+      [];
+    const journal = {
+      record: jest.fn((input: { event: JournalEvent; details?: unknown }) => {
+        journalRecords.push(input);
+        return Promise.resolve();
+      }),
+    };
+
     const service = new AssistantService(
       prisma as never,
       users as never,
       client,
+      journal as never,
     );
 
     return {
@@ -186,11 +197,12 @@ describe('AssistantService', () => {
       recommendationCreate,
       prisma,
       users,
+      journalRecords,
     };
   }
 
   it('saves an assistant reply apart from diary facts and keeps the free note local', async () => {
-    const { service, create, updateMany, sent } = setup({
+    const { service, create, updateMany, sent, journalRecords } = setup({
       isEnabled: true,
       complete: () => Promise.resolve(SAFE_LLM),
     });
@@ -254,6 +266,29 @@ describe('AssistantService', () => {
       where: { userId: 1, noteDate },
       data: { advisorComment: SAFE_LLM },
     });
+
+    const journalText = JSON.stringify(journalRecords);
+    expect(journalText).not.toContain(FREE_NOTE);
+    expect(journalText).not.toContain(USER_COMMENT);
+    expect(journalText).not.toContain('hash-secret');
+    expect(journalText).not.toContain(PLAN_DESCRIPTION);
+    expect(journalText).not.toContain('user_day_comments');
+    expect(journalRecords).toEqual([
+      {
+        userId: 1,
+        event: JournalEvent.analysis_requested,
+        details: {
+          period: 'day',
+          period_from: '2026-10-30',
+          period_to: '2026-10-30',
+          model_called: true,
+          source: AssistantSource.llm,
+          boundary_check: 'filtered_empty',
+          kept_items: 0,
+          recommendation_id: null,
+        },
+      },
+    ]);
   });
 
   it('falls back to a rules comment when the model diagnoses or promises weight', async () => {
@@ -412,7 +447,7 @@ describe('AssistantService', () => {
       },
     );
 
-    const { service, recommendationCreate } = setup(
+    const { service, recommendationCreate, journalRecords } = setup(
       { isEnabled: false },
       { dayTaskFindMany },
     );
@@ -434,5 +469,57 @@ describe('AssistantService', () => {
     const saved = recommendationCreate.mock.calls[0]?.[0].data;
     expect(saved?.status).toBe(RecommendationStatus.draft);
     expect(Array.isArray(saved?.itemsJson)).toBe(true);
+    expect(journalRecords).toEqual([
+      {
+        userId: 1,
+        event: JournalEvent.analysis_requested,
+        details: expect.objectContaining({
+          model_called: false,
+          boundary_check: 'passed',
+          recommendation_id: 42,
+        }),
+      },
+    ]);
+    expect(JSON.stringify(journalRecords)).not.toContain(USER_COMMENT);
+  });
+
+  it('records an external call failure without the model payload', async () => {
+    const { service, journalRecords, sent } = setup({
+      isEnabled: true,
+      complete: () => {
+        const error = new Error('The operation was aborted');
+        error.name = 'AbortError';
+        return Promise.reject(error);
+      },
+    });
+
+    const response = await service.analyze(1, {
+      period: 'day',
+      date: '2026-10-30',
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(response.assistant_reply.source).toBe(AssistantSource.rules);
+    expect(journalRecords).toEqual([
+      {
+        userId: 1,
+        event: JournalEvent.external_call_error,
+        details: { reason: 'timeout' },
+      },
+      {
+        userId: 1,
+        event: JournalEvent.analysis_requested,
+        details: expect.objectContaining({
+          model_called: true,
+          source: AssistantSource.rules,
+          boundary_check: 'filtered_empty',
+          recommendation_id: null,
+        }),
+      },
+    ]);
+    const journalText = JSON.stringify(journalRecords);
+    expect(journalText).not.toContain(USER_COMMENT);
+    expect(journalText).not.toContain(FREE_NOTE);
+    expect(journalText).not.toContain('hash-secret');
   });
 });

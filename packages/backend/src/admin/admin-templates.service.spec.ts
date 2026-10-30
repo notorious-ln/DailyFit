@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { Prisma, Template, TemplateType } from '@prisma/client';
+import { JournalEvent, Prisma, Template, TemplateType } from '@prisma/client';
 import { CatalogService } from '../catalog/catalog.service';
 import { AdminTemplatesService } from './admin-templates.service';
 import { TemplateWriteDto, UpdateTemplateDto } from './dto/template-write.dto';
@@ -58,13 +58,16 @@ describe('AdminTemplatesService', () => {
       },
     };
 
+    const journalRecord = jest.fn().mockResolvedValue(undefined);
     const service = new AdminTemplatesService(
       prisma as never,
       new CatalogService({} as never, {} as never),
+      { record: journalRecord } as never,
     );
 
     return {
       service,
+      journalRecord,
       templateFindMany,
       templateFindUnique,
       templateCreate,
@@ -137,6 +140,14 @@ describe('AdminTemplatesService', () => {
     });
     expect(result.id).toBe(9);
     expect(result.is_visible).toBe(true);
+    expect(handles.journalRecord).toHaveBeenCalledWith({
+      userId: 4,
+      event: JournalEvent.template_created,
+      details: { template_id: 9 },
+    });
+    expect(JSON.stringify(handles.journalRecord.mock.calls)).not.toContain(
+      'Завтрак',
+    );
     expectUserDataUntouched(handles);
   });
 
@@ -182,6 +193,11 @@ describe('AdminTemplatesService', () => {
     });
     expect(result.title).toBe('Рацион дома');
     expect(result.body_json).toEqual({ meals: [{ name: 'Завтрак' }] });
+    expect(handles.journalRecord).toHaveBeenCalledWith({
+      userId: 4,
+      event: JournalEvent.template_updated,
+      details: { template_id: 7 },
+    });
     expectUserDataUntouched(handles);
   });
 
@@ -216,6 +232,11 @@ describe('AdminTemplatesService', () => {
       data: { isVisible: false },
     });
     expect(result.is_visible).toBe(false);
+    expect(handles.journalRecord).toHaveBeenCalledWith({
+      userId: 4,
+      event: JournalEvent.template_hidden,
+      details: { template_id: 7 },
+    });
     expectUserDataUntouched(handles);
   });
 

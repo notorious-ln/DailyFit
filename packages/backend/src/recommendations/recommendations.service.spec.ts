@@ -1,5 +1,6 @@
 import {
   AssistantSource,
+  JournalEvent,
   RecommendationStatus,
   TaskStatus,
 } from '@prisma/client';
@@ -152,9 +153,11 @@ describe('RecommendationsService', () => {
       }),
     };
 
+    const journalRecord = jest.fn().mockResolvedValue(undefined);
     const service = new RecommendationsService(
       prisma as never,
       usersService as never,
+      { record: journalRecord } as never,
     );
     return {
       service,
@@ -165,11 +168,19 @@ describe('RecommendationsService', () => {
       activePlanUpdate,
       recommendation,
       task,
+      journalRecord,
     };
   }
 
   it('rejects a draft without changing the plan', async () => {
-    const { service, prisma, recommendationUpdate, dayTaskUpdate } = setup();
+    const {
+      service,
+      prisma,
+      tx,
+      recommendationUpdate,
+      dayTaskUpdate,
+      journalRecord,
+    } = setup();
 
     const result = await service.decide(1, 7, { action: 'reject' });
 
@@ -180,10 +191,22 @@ describe('RecommendationsService', () => {
       data: { status: RecommendationStatus.rejected },
     });
     expect(dayTaskUpdate).not.toHaveBeenCalled();
+    expect(journalRecord).toHaveBeenCalledWith(
+      {
+        userId: 1,
+        event: JournalEvent.recommendation_rejected,
+        details: {
+          recommendation_id: 7,
+          status: RecommendationStatus.rejected,
+        },
+      },
+      tx,
+    );
   });
 
   it('accepts all items when selectedItems is omitted', async () => {
-    const { service, dayTaskUpdate, recommendationUpdate } = setup();
+    const { service, tx, dayTaskUpdate, recommendationUpdate, journalRecord } =
+      setup();
 
     const result = await service.decide(1, 7, { action: 'accept' });
 
@@ -196,6 +219,19 @@ describe('RecommendationsService', () => {
         }),
       }),
     );
+    expect(journalRecord).toHaveBeenCalledWith(
+      {
+        userId: 1,
+        event: JournalEvent.recommendation_accepted,
+        details: {
+          recommendation_id: 7,
+          status: RecommendationStatus.accepted,
+          selected_count: 2,
+        },
+      },
+      tx,
+    );
+    expect(JSON.stringify(journalRecord.mock.calls)).not.toContain('День B');
   });
 
   it('refuses a recommendation that is no longer a draft', async () => {

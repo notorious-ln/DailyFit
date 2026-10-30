@@ -4,8 +4,9 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, Template, TemplateType } from '@prisma/client';
+import { JournalEvent, Prisma, Template, TemplateType } from '@prisma/client';
 import { CatalogService, TemplateResponse } from '../catalog/catalog.service';
+import { JournalService } from '../journal/journal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TemplateWriteDto, UpdateTemplateDto } from './dto/template-write.dto';
 
@@ -16,6 +17,7 @@ export class AdminTemplatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly catalog: CatalogService,
+    private readonly journal: JournalService,
   ) {}
 
   async list(): Promise<TemplateResponse[]> {
@@ -35,6 +37,11 @@ export class AdminTemplatesService {
         isVisible: dto.is_visible ?? true,
       },
     });
+    await this.journal.record({
+      userId: adminId,
+      event: JournalEvent.template_created,
+      details: { template_id: created.id },
+    });
     this.logger.log(`создание шаблона admin=${adminId} template=${created.id}`);
     return this.catalog.toTemplate(created);
   }
@@ -48,6 +55,11 @@ export class AdminTemplatesService {
       ...this.fields(dto),
       ...(dto.is_visible !== undefined ? { isVisible: dto.is_visible } : {}),
     });
+    await this.journal.record({
+      userId: adminId,
+      event: JournalEvent.template_updated,
+      details: { template_id: updated.id },
+    });
     this.logger.log(
       `изменение шаблона admin=${adminId} template=${updated.id}`,
     );
@@ -57,6 +69,11 @@ export class AdminTemplatesService {
   async hide(adminId: number, id: number): Promise<TemplateResponse> {
     await this.requireTemplate(id);
     const hidden = await this.save(id, { isVisible: false });
+    await this.journal.record({
+      userId: adminId,
+      event: JournalEvent.template_hidden,
+      details: { template_id: hidden.id },
+    });
     this.logger.log(`скрытие шаблона admin=${adminId} template=${hidden.id}`);
     return this.catalog.toTemplate(hidden);
   }

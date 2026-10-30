@@ -9,6 +9,7 @@ import {
   AssistantSource,
   DiaryNote,
   Feeling,
+  JournalEvent,
   Prisma,
   RecommendationStatus,
   TaskStatus,
@@ -23,6 +24,11 @@ import {
   startOfIsoWeek,
 } from '../day/date.util';
 import { calculateMaintenanceCalories } from '../plans/calorie-calculator';
+import {
+  classifyExternalCallError,
+  ExternalCallFailure,
+} from '../journal/external-call';
+import { JournalService } from '../journal/journal.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   RecommendationResponse,
@@ -80,6 +86,13 @@ type AnalyzeInput = {
   date?: string;
 };
 
+type ResolvedComment = {
+  text: string;
+  source: AssistantSource;
+  modelCalled: boolean;
+  externalError: ExternalCallFailure | null;
+};
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -88,6 +101,7 @@ export class AssistantService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly llm: LlmClient,
+    private readonly journal: JournalService,
   ) {}
 
   async analyze(userId: number, dto: AnalyzeInput): Promise<AnalyzeResponse> {
@@ -236,11 +250,21 @@ export class AssistantService {
       feelings: wellbeing,
     });
 
-    const { text, source } = await this.resolveComment(
-      payload,
-      rulesText,
-      user.cloudAssistantEnabled,
-    );
+    const { text, source, modelCalled, externalError } =
+      await this.resolveComment(payload, rulesText, user.cloudAssistantEnabled);
+
+    if (externalError) {
+      await this.journal.record({
+        userId,
+        event: JournalEvent.external_call_error,
+        details: {
+          reason: externalError.reason,
+          ...(externalError.http_status != null
+            ? { http_status: externalError.http_status }
+            : {}),
+        },
+      });
+    }
 
     const reply = await this.prisma.assistantReply.create({
       data: {
@@ -300,6 +324,21 @@ export class AssistantService {
       });
       recommendation = toRecommendationResponse(created);
     }
+
+    await this.journal.record({
+      userId,
+      event: JournalEvent.analysis_requested,
+      details: {
+        period: dto.period,
+        period_from: dateKey(from),
+        period_to: dateKey(to),
+        model_called: modelCalled,
+        source,
+        boundary_check: draftItems.length > 0 ? 'passed' : 'filtered_empty',
+        kept_items: draftItems.length,
+        recommendation_id: recommendation?.id ?? null,
+      },
+    });
 
     this.logger.log(
       `запрос разбора user=${userId} period=${dto.period} source=${source} boundaries=${draftItems.length > 0 ? `ok items=${draftItems.length}` : 'filtered_empty'}`,
@@ -373,26 +412,47 @@ export class AssistantService {
     payload: LlmPayload,
     rulesText: string,
     cloudAssistantEnabled: boolean,
-  ): Promise<{ text: string; source: AssistantSource }> {
+  ): Promise<ResolvedComment> {
     const local = isSafeComment(rulesText) ? rulesText : SAFE_FALLBACK;
 
     if (!cloudAssistantEnabled || !this.llm.isEnabled()) {
-      return { text: local, source: AssistantSource.rules };
+      return {
+        text: local,
+        source: AssistantSource.rules,
+        modelCalled: false,
+        externalError: null,
+      };
     }
 
     try {
       const raw = await this.llm.complete(payload);
       if (isSafeComment(raw)) {
-        return { text: raw.trim(), source: AssistantSource.llm };
+        return {
+          text: raw.trim(),
+          source: AssistantSource.llm,
+          modelCalled: true,
+          externalError: null,
+        };
       }
       this.logger.warn(
         'комментарий внешней модели отклонён: диагноз или обещание веса к дате',
       );
-    } catch {
+    } catch (error) {
       this.logger.warn('сбой внешней модели, комментарий построен правилами');
+      return {
+        text: local,
+        source: AssistantSource.rules,
+        modelCalled: true,
+        externalError: classifyExternalCallError(error),
+      };
     }
 
-    return { text: local, source: AssistantSource.rules };
+    return {
+      text: local,
+      source: AssistantSource.rules,
+      modelCalled: true,
+      externalError: null,
+    };
   }
 
   private toPlanParameters(plan: ActivePlan): ActivePlanParameter {
