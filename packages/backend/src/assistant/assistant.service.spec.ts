@@ -361,6 +361,9 @@ describe('AssistantService', () => {
             },
           ]);
         }
+        if (kind === 'meal') {
+          return Promise.resolve([]);
+        }
         return Promise.resolve([
           {
             id: 1,

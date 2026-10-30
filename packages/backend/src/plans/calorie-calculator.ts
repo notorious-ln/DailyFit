@@ -10,6 +10,17 @@ export type CalorieProfile = Pick<
  * goal: 1 = deficit, 2 = maintain, 3 = surplus (as used in profile).
  */
 export function calculateDailyCalories(profile: CalorieProfile): number | null {
+  const maintenance = calculateMaintenanceCalories(profile);
+  if (maintenance == null) {
+    return null;
+  }
+  return Math.round(maintenance * goalMultiplier(profile.goal));
+}
+
+/** Поддержание: BMR × активность, без множителя цели (FT-12 нижняя граница 80%). */
+export function calculateMaintenanceCalories(
+  profile: CalorieProfile,
+): number | null {
   const { gender, age, heightCm, weightKg } = profile;
   if (
     gender == null ||
@@ -25,8 +36,7 @@ export function calculateDailyCalories(profile: CalorieProfile): number | null {
 
   const bmr = mifflinStJeor(gender, weightKg, heightCm, age);
   const activity = activityMultiplier(profile.workoutsPerWeek);
-  const goal = goalMultiplier(profile.goal);
-  return Math.round(bmr * activity * goal);
+  return Math.round(bmr * activity);
 }
 
 function mifflinStJeor(

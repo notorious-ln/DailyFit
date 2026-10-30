@@ -5,6 +5,10 @@ import {
 } from '@prisma/client';
 import { dateKey } from '../day/date.util';
 import {
+  absoluteCalorieDelta,
+  fitsCalorieBudget,
+} from '../assistant/rules-meal-recs';
+import {
   RecommendationItem,
   absoluteVolumeDelta,
   fitsVolumeBudget,
@@ -78,9 +82,31 @@ export function assertVolumeWithinLimit(
   items: RecommendationItem[],
   baseVolume: number,
 ): void {
-  if (!fitsVolumeBudget(items, baseVolume)) {
+  const workoutItems = items.filter(
+    (item) =>
+      item.change.kind === 'sets' ||
+      item.change.kind === 'simplify_exercise' ||
+      item.change.kind === 'reschedule',
+  );
+  if (!fitsVolumeBudget(workoutItems, baseVolume)) {
     throw new Error(
-      `VOLUME_LIMIT:${absoluteVolumeDelta(items)}/${baseVolume}`,
+      `VOLUME_LIMIT:${absoluteVolumeDelta(workoutItems)}/${baseVolume}`,
+    );
+  }
+}
+
+export function assertCalorieWithinLimit(
+  items: RecommendationItem[],
+  currentCalories: number,
+): void {
+  const mealItems = items.filter(
+    (item) =>
+      item.change.kind === 'shift_calories' ||
+      item.change.kind === 'replace_dish',
+  );
+  if (!fitsCalorieBudget(mealItems, currentCalories)) {
+    throw new Error(
+      `CALORIE_LIMIT:${absoluteCalorieDelta(mealItems)}/${currentCalories}`,
     );
   }
 }
