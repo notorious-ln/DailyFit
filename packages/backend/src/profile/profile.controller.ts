@@ -1,4 +1,12 @@
-import { Body, Controller, HttpCode, HttpStatus, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Put,
+  UseGuards,
+} from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { PublicUser } from '../auth/auth.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -9,6 +17,11 @@ import { ProfileService } from './profile.service';
 @UseGuards(JwtAuthGuard)
 export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}
+
+  @Get()
+  get(@CurrentUser() user: PublicUser) {
+    return this.profileService.get(user.id);
+  }
 
   @Put()
   @HttpCode(HttpStatus.OK)
