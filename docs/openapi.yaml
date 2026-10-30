@@ -25,6 +25,8 @@ tags:
     description: UC-7 — самочувствие и вес
   - name: Progress
     description: UC-8 — прогресс за неделю
+  - name: Reports
+    description: FT-15 — отчёт за период на экране
   - name: Assistant
     description: UC-9 — разбор у помощника
   - name: Recommendations
@@ -334,6 +336,49 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/WeekProgress'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /reports/period:
+    get:
+      tags: [Reports]
+      summary: Отчёт за период
+      description: |
+        Пользователь задаёт период и получает отчёт для экрана (FT-15).
+        В ответе процент соблюдения тренировок, число тренировок,
+        введённый вес и список принятых корректировок.
+        Файл офисного пакета не формируется: отчёт открывается на экране.
+        Процент: выполнено 1, частично 0.5, пропущено и без отметки 0.
+        Число тренировок — задачи тренировок в периоде.
+        Вес — записи дневника, где вес введён.
+        Корректировки — пункты рекомендаций «принята» и «частично принята»,
+        чей период пересекается с заданным. У частичного принятия только
+        отмеченные пункты. Черновики и отклонённые не входят.
+      operationId: getPeriodReport
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Начало периода, YYYY-MM-DD
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          description: Конец периода, YYYY-MM-DD
+      responses:
+        '200':
+          description: Отчёт для отображения на экране
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeriodReport'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -969,6 +1014,72 @@ components:
                 format: date
               weight_kg:
                 type: number
+
+    PeriodReport:
+      type: object
+      required:
+        - period_from
+        - period_to
+        - percent
+        - workout_count
+        - weights
+        - adjustments
+      description: |
+        Отчёт за период для экрана. Не является файлом офисного пакета.
+      properties:
+        period_from:
+          type: string
+          format: date
+        period_to:
+          type: string
+          format: date
+        percent:
+          type: number
+          nullable: true
+          description: Процент соблюдения тренировок за период. null, если тренировок нет
+        workout_count:
+          type: integer
+          description: Число тренировок за период
+        weights:
+          type: array
+          description: Введённый вес
+          items:
+            type: object
+            required: [date, weight_kg]
+            properties:
+              date:
+                type: string
+                format: date
+              weight_kg:
+                type: number
+        adjustments:
+          type: array
+          description: Принятые корректировки
+          items:
+            type: object
+            required:
+              - recommendation_id
+              - status
+              - period_from
+              - period_to
+              - title
+              - description
+            properties:
+              recommendation_id:
+                type: integer
+              status:
+                type: string
+                enum: [accepted, partially_accepted]
+              period_from:
+                type: string
+                format: date
+              period_to:
+                type: string
+                format: date
+              title:
+                type: string
+              description:
+                type: string
 
     AnalyzePeriod:
       type: string
