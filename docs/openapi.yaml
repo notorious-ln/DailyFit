@@ -1,0 +1,999 @@
+openapi: 3.0.3
+info:
+  title: DailyFit API
+  description: |
+    OpenAPI-спецификация DailyFit по use cases (UC-1 — UC-11)
+    и схеме БД из `docs/architectureOfDB` / `docs/sequence`.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:3000
+    description: Локальный NestJS backend
+
+tags:
+  - name: Auth
+    description: UC-1 — регистрация и вход
+  - name: Profile
+    description: UC-2 — профиль и цель
+  - name: Catalog
+    description: UC-3 — каталог шаблонов
+  - name: Plans
+    description: UC-4 / UC-5 — активация планов
+  - name: Day
+    description: UC-6 — задачи дня
+  - name: Diary
+    description: UC-7 — самочувствие и вес
+  - name: Progress
+    description: UC-8 — прогресс за неделю
+  - name: Assistant
+    description: UC-9 — разбор у помощника
+  - name: Recommendations
+    description: UC-10 — принятие / отклонение правок
+  - name: Admin
+    description: UC-11 — шаблоны администратора
+
+paths:
+  /register:
+    post:
+      tags: [Auth]
+      summary: Регистрация
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthCredentials'
+      responses:
+        '201':
+          description: Пользователь создан, сессия выдана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Email уже занят
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /login:
+    post:
+      tags: [Auth]
+      summary: Вход
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthCredentials'
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Неверный email или пароль (без детализации)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /profile:
+    put:
+      tags: [Profile]
+      summary: Сохранить профиль и цель
+      operationId: updateProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      responses:
+        '200':
+          description: Профиль сохранён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '400':
+          description: Не заполнены обязательные поля (цель и уровень)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /templates:
+    get:
+      tags: [Catalog]
+      summary: Список видимых шаблонов с фильтрацией по профилю
+      operationId: listTemplates
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/TemplateType'
+        - name: level
+          in: query
+          schema:
+            type: integer
+        - name: place
+          in: query
+          schema:
+            $ref: '#/components/schemas/TrainingPlace'
+      responses:
+        '200':
+          description: Список карточек шаблонов (может быть пустым)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TemplateCard'
+                  hint:
+                    type: string
+                    description: Подсказка ослабить фильтры, если список пуст
+                    nullable: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /templates/{id}:
+    get:
+      tags: [Catalog]
+      summary: Карточка шаблона
+      operationId: getTemplate
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Полное описание шаблона
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /activate-workout:
+    post:
+      tags: [Plans]
+      summary: Активировать план тренировок
+      operationId: activateWorkout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateWorkoutRequest'
+      responses:
+        '200':
+          description: План тренировок активирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivePlan'
+        '409':
+          description: Уже есть активный план — нужно подтверждение замены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanReplaceWarning'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /activate-meal:
+    post:
+      tags: [Plans]
+      summary: Активировать план питания
+      operationId: activateMeal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateMealRequest'
+      responses:
+        '200':
+          description: План питания активирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivePlan'
+        '202':
+          description: Нужен ввод или подтверждение калорийности
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaloriePreview'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /day/{date}:
+    get:
+      tags: [Day]
+      summary: Задачи на дату (генерируются из активного плана при отсутствии)
+      operationId: getDay
+      parameters:
+        - $ref: '#/components/parameters/DatePath'
+      responses:
+        '200':
+          description: Список задач дня
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /day/{date}/tasks:
+    put:
+      tags: [Day]
+      summary: Обновить статусы задач дня
+      description: |
+        Редактирование доступно только для дат не старше 7 дней.
+        Статусы: выполнено / частично / пропущено.
+      operationId: updateDayTasks
+      parameters:
+        - $ref: '#/components/parameters/DatePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDayTasksRequest'
+      responses:
+        '200':
+          description: Обновлённые статусы и проценты
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DayView'
+        '403':
+          description: День только для чтения (дата старше 7 дней)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /diary/{date}:
+    put:
+      tags: [Diary]
+      summary: Создать или обновить запись дневника
+      operationId: upsertDiary
+      parameters:
+        - $ref: '#/components/parameters/DatePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiaryUpsert'
+      responses:
+        '200':
+          description: Запись сохранена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiaryNote'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /progress/week:
+    get:
+      tags: [Progress]
+      summary: Сводка прогресса за неделю
+      operationId: getWeekProgress
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Начало периода (опционально)
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Конец периода (опционально)
+      responses:
+        '200':
+          description: Сводка (может быть пустой)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeekProgress'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /analyze:
+    post:
+      tags: [Assistant]
+      summary: Запросить разбор дня или недели
+      description: |
+        Собирает безопасную сводку (свободная пометка профиля не уходит).
+        При включённом облачном помощнике — LLM, иначе / при сбое — rule engine.
+        Опасные правки отсекаются; допустимые создаются как черновик рекомендации.
+      operationId: analyze
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeRequest'
+      responses:
+        '200':
+          description: Комментарий и опциональные пункты-черновики
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /recommendations/{id}/decide:
+    post:
+      tags: [Recommendations]
+      summary: Принять или отклонить рекомендацию
+      description: |
+        При принятии изменения применяются только к будущим задачам.
+        Прошедшие дни и уже поставленные отметки не переписываются.
+      operationId: decideRecommendation
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationDecide'
+      responses:
+        '200':
+          description: Решение применено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendation'
+        '409':
+          description: Ошибка сохранения, статус не изменён (rollback)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/templates:
+    get:
+      tags: [Admin]
+      summary: Список всех шаблонов (admin)
+      operationId: adminListTemplates
+      responses:
+        '200':
+          description: Список шаблонов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Template'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags: [Admin]
+      summary: Создать шаблон (admin)
+      operationId: adminCreateTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TemplateWrite'
+      responses:
+        '201':
+          description: Шаблон создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags: [Admin]
+      summary: Обновить шаблон (admin)
+      description: Изменение шаблона не затрагивает уже активированные копии пользователей.
+      operationId: adminUpdateTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - type: object
+                  required: [id]
+                  properties:
+                    id:
+                      type: integer
+                - $ref: '#/components/schemas/TemplateWrite'
+      responses:
+        '200':
+          description: Шаблон сохранён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/templates/{id}/hide:
+    patch:
+      tags: [Admin]
+      summary: Скрыть шаблон из каталога
+      operationId: adminHideTemplate
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Шаблон скрыт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Template'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT / session token после /register или /login
+
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    DatePath:
+      name: date
+      in: path
+      required: true
+      schema:
+        type: string
+        format: date
+      description: Дата в формате YYYY-MM-DD
+
+  responses:
+    Unauthorized:
+      description: Требуется авторизация
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Доступ запрещён (нет роли admin)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    ValidationError:
+      description: Ошибка валидации
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+          nullable: true
+
+    AuthCredentials:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+          description: Пароль ≥ 8 символов
+        display_name:
+          type: string
+          description: Только для регистрации (опционально)
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: JWT / session token
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+          nullable: true
+        role:
+          $ref: '#/components/schemas/UserRole'
+        goal:
+          type: integer
+          nullable: true
+        level:
+          type: integer
+          nullable: true
+
+    UserRole:
+      type: string
+      enum: [user, admin]
+
+    TrainingPlace:
+      type: string
+      enum: [home, gym]
+      description: Дом или зал
+
+    ProfileUpdate:
+      type: object
+      required: [goal, level]
+      properties:
+        goal:
+          type: integer
+          description: Цель (обязательно)
+        level:
+          type: integer
+          description: Уровень (обязательно)
+        place:
+          $ref: '#/components/schemas/TrainingPlace'
+        workouts_per_week:
+          type: integer
+          minimum: 1
+        gender:
+          type: string
+          enum: [male, female, other]
+          nullable: true
+        age:
+          type: integer
+          minimum: 1
+          nullable: true
+        height_cm:
+          type: number
+          nullable: true
+        weight_kg:
+          type: number
+          nullable: true
+        limitation_tags:
+          type: array
+          items:
+            type: string
+          description: Метки ограничений
+
+    Profile:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          properties:
+            place:
+              $ref: '#/components/schemas/TrainingPlace'
+            workouts_per_week:
+              type: integer
+            gender:
+              type: string
+              nullable: true
+            age:
+              type: integer
+              nullable: true
+            height_cm:
+              type: number
+              nullable: true
+            weight_kg:
+              type: number
+              nullable: true
+            limitation_tags:
+              type: array
+              items:
+                type: string
+
+    TemplateType:
+      type: string
+      enum: [workout, meal]
+
+    TemplateCard:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          $ref: '#/components/schemas/TemplateType'
+        title:
+          type: string
+        level_place:
+          type: string
+          description: Уровень и место (дом/зал)
+        is_visible:
+          type: boolean
+
+    Template:
+      allOf:
+        - $ref: '#/components/schemas/TemplateCard'
+        - type: object
+          properties:
+            body_json:
+              type: object
+              additionalProperties: true
+              description: Полное описание дней / рациона
+
+    TemplateWrite:
+      type: object
+      required: [type, title, level_place, body_json]
+      properties:
+        type:
+          $ref: '#/components/schemas/TemplateType'
+        title:
+          type: string
+        level_place:
+          type: string
+        body_json:
+          type: object
+          additionalProperties: true
+        is_visible:
+          type: boolean
+          default: true
+
+    ActivateWorkoutRequest:
+      type: object
+      required: [templateId]
+      properties:
+        templateId:
+          type: integer
+        confirmReplace:
+          type: boolean
+          default: false
+          description: Подтверждение замены активного плана
+
+    ActivateMealRequest:
+      type: object
+      required: [templateId]
+      properties:
+        templateId:
+          type: integer
+        daily_calories:
+          type: integer
+          description: Ручной ввод или правка рассчитанной калорийности
+        confirm:
+          type: boolean
+          default: false
+          description: Подтверждение после превью калорийности
+
+    CaloriePreview:
+      type: object
+      properties:
+        suggested_calories:
+          type: integer
+          nullable: true
+          description: Расчёт Mifflin-St Jeor (если данных профиля достаточно)
+        needs_manual_input:
+          type: boolean
+        message:
+          type: string
+
+    PlanReplaceWarning:
+      type: object
+      properties:
+        message:
+          type: string
+        current_plan_id:
+          type: integer
+        requires_confirm:
+          type: boolean
+          example: true
+
+    ActivePlan:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        template_id:
+          type: integer
+        type:
+          $ref: '#/components/schemas/TemplateType'
+        is_active:
+          type: boolean
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        daily_calories:
+          type: integer
+          nullable: true
+          description: Для meal-плана
+
+    TaskStatus:
+      type: string
+      enum: [done, partial, skipped]
+      description: выполнено / частично / пропущено
+
+    DayTask:
+      type: object
+      properties:
+        id:
+          type: integer
+        plan_id:
+          type: integer
+        task_date:
+          type: string
+          format: date
+        kind:
+          type: string
+          description: Тип задачи (workout / meal / other)
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        details_json:
+          type: object
+          additionalProperties: true
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    DayView:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayTask'
+        day_compliance_percent:
+          type: number
+          nullable: true
+        week_compliance_percent:
+          type: number
+          nullable: true
+        readonly:
+          type: boolean
+          description: true, если дата старше 7 дней
+
+    UpdateDayTasksRequest:
+      type: object
+      required: [tasks]
+      properties:
+        tasks:
+          type: array
+          items:
+            type: object
+            required: [id, status]
+            properties:
+              id:
+                type: integer
+              status:
+                $ref: '#/components/schemas/TaskStatus'
+
+    Feeling:
+      type: string
+      enum: [easy, normal, hard]
+      description: легко / нормально / тяжело
+
+    DiaryUpsert:
+      type: object
+      required: [feeling]
+      properties:
+        feeling:
+          $ref: '#/components/schemas/Feeling'
+        weight_kg:
+          type: number
+          nullable: true
+        user_comment:
+          type: string
+          nullable: true
+
+    DiaryNote:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        note_date:
+          type: string
+          format: date
+        feeling:
+          $ref: '#/components/schemas/Feeling'
+        weight_kg:
+          type: number
+          nullable: true
+        user_comment:
+          type: string
+          nullable: true
+        advisor_comment:
+          type: string
+          nullable: true
+
+    WeekProgress:
+      type: object
+      properties:
+        empty:
+          type: boolean
+        workout_percent:
+          type: number
+          nullable: true
+        meal_percent:
+          type: number
+          nullable: true
+        skips:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              title:
+                type: string
+              kind:
+                type: string
+        weight_series:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              weight_kg:
+                type: number
+
+    AnalyzePeriod:
+      type: string
+      enum: [day, week]
+
+    AnalyzeRequest:
+      type: object
+      required: [period]
+      properties:
+        period:
+          $ref: '#/components/schemas/AnalyzePeriod'
+        date:
+          type: string
+          format: date
+          description: Якорная дата для day/week
+
+    AnalyzeResponse:
+      type: object
+      properties:
+        summary_text:
+          type: string
+          description: Комментарий помощника
+        recommendation:
+          allOf:
+            - $ref: '#/components/schemas/Recommendation'
+          nullable: true
+          description: null, если все опасные пункты отсечены
+
+    RecommendationStatus:
+      type: string
+      enum: [draft, accepted, partially_accepted, rejected]
+      description: черновик / принята / частично принята / отклонена
+
+    Recommendation:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        period_from:
+          type: string
+          format: date
+        period_to:
+          type: string
+          format: date
+        source:
+          type: string
+          description: llm / rules
+        status:
+          $ref: '#/components/schemas/RecommendationStatus'
+        summary_text:
+          type: string
+        items_json:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecommendationItem'
+        created_at:
+          type: string
+          format: date-time
+
+    RecommendationItem:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        selected:
+          type: boolean
+          default: false
+
+    RecommendationDecide:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [accept, reject]
+        selectedItems:
+          type: array
+          items:
+            type: string
+          description: ID пунктов для частичного принятия; пусто = все
+
+security:
+  - bearerAuth: []
