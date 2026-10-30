@@ -109,6 +109,7 @@ describe('RecommendationsService', () => {
         update: dayTaskUpdate,
       },
       activePlan: {
+        findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn().mockResolvedValue({
           id: 4,
           bodyJson: {
@@ -139,7 +140,22 @@ describe('RecommendationsService', () => {
       ),
     };
 
-    const service = new RecommendationsService(prisma as never);
+    const usersService = {
+      findById: jest.fn().mockResolvedValue({
+        id: 1,
+        gender: 'female',
+        age: 30,
+        heightCm: 170,
+        weightKg: 65,
+        workoutsPerWeek: 3,
+        goal: 2,
+      }),
+    };
+
+    const service = new RecommendationsService(
+      prisma as never,
+      usersService as never,
+    );
     return {
       service,
       prisma,
@@ -228,5 +244,75 @@ describe('RecommendationsService', () => {
     await expect(
       service.decide(1, 7, { action: 'accept', selectedItems: ['big'] }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('applies a calorie shift to the active meal plan and future unmarked tasks', async () => {
+    const { service, tx, dayTaskUpdate, activePlanUpdate, recommendation } =
+      setup();
+    const mealTask = {
+      id: 30,
+      planId: 8,
+      title: 'Питание: план',
+      kind: 'meal',
+      status: null as TaskStatus | null,
+      taskDate: futureDate,
+      detailsJson: {
+        daily_calories: 2000,
+        meals: [{ name: 'Обед', examples: ['Курица', 'Рис'] }],
+      },
+      completedAt: null,
+    };
+    recommendation.itemsJson = [
+      {
+        id: 'meal-1',
+        title: 'Питание: меньше калорий',
+        description: 'Задача. Изменение. Причина.',
+        selected: false,
+        change: {
+          kind: 'shift_calories' as const,
+          direction: 'ease' as const,
+          taskId: 30,
+          planId: 8,
+          fromCalories: 2000,
+          toCalories: 1800,
+          calorieDelta: -200,
+          volumeDeltaSets: 0,
+        },
+      },
+    ];
+    tx.activePlan.findFirst.mockResolvedValue({
+      id: 8,
+      dailyCalories: 2000,
+      bodyJson: {
+        meals: [{ name: 'Обед', examples: ['Курица', 'Рис'] }],
+      },
+    });
+    tx.dayTask.findMany.mockImplementation((args: { where?: { kind?: string } }) => {
+      if (args.where?.kind === 'meal') {
+        return Promise.resolve([mealTask]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const result = await service.decide(1, 7, {
+      action: 'accept',
+      selectedItems: ['meal-1'],
+    });
+
+    expect(result.status).toBe(RecommendationStatus.accepted);
+    expect(activePlanUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 8 },
+        data: expect.objectContaining({ dailyCalories: 1800 }),
+      }),
+    );
+    expect(dayTaskUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 30 },
+        data: expect.objectContaining({
+          detailsJson: expect.objectContaining({ daily_calories: 1800 }),
+        }),
+      }),
+    );
   });
 });

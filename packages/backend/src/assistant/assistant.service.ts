@@ -22,6 +22,7 @@ import {
   parseDateParam,
   startOfIsoWeek,
 } from '../day/date.util';
+import { calculateMaintenanceCalories } from '../plans/calorie-calculator';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   RecommendationResponse,
@@ -39,6 +40,11 @@ import {
 } from './llm-payload';
 import { buildRulesComment } from './rules-comment';
 import {
+  MealTaskInput,
+  buildMealRecommendations,
+} from './rules-meal-recs';
+import {
+  RecommendationItem,
   WorkoutTaskInput,
   buildWorkoutRecommendations,
 } from './rules-workout-recs';
@@ -97,52 +103,77 @@ export class AssistantService {
     const weekEnd = addUtcDays(weekStart, 6);
     const futureTo = addUtcDays(today, 14);
 
-    const [tasks, notes, plans, recentWorkouts, weekWorkouts, futureWorkouts] =
-      await Promise.all([
-        this.prisma.dayTask.findMany({
-          where: {
-            plan: { userId },
-            taskDate: { gte: from, lte: to },
-          },
-          orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
-        }),
-        this.prisma.diaryNote.findMany({
-          where: {
-            userId,
-            noteDate: { gte: from, lte: to },
-          },
-          orderBy: { noteDate: 'asc' },
-        }),
-        this.prisma.activePlan.findMany({
-          where: { userId, isActive: true },
-          orderBy: { id: 'asc' },
-        }),
-        this.prisma.dayTask.findMany({
-          where: {
-            kind: 'workout',
-            plan: { userId },
-            taskDate: { gte: recentFrom, lte: to },
-          },
-          orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
-        }),
-        this.prisma.dayTask.findMany({
-          where: {
-            kind: 'workout',
-            plan: { userId },
-            taskDate: { gte: weekStart, lte: weekEnd },
-          },
-          orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
-        }),
-        this.prisma.dayTask.findMany({
-          where: {
-            kind: 'workout',
-            plan: { userId },
-            taskDate: { gte: today, lte: futureTo },
-            status: null,
-          },
-          orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
-        }),
-      ]);
+    const [
+      tasks,
+      notes,
+      plans,
+      recentWorkouts,
+      weekWorkouts,
+      futureWorkouts,
+      recentMeals,
+      futureMeals,
+    ] = await Promise.all([
+      this.prisma.dayTask.findMany({
+        where: {
+          plan: { userId },
+          taskDate: { gte: from, lte: to },
+        },
+        orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.diaryNote.findMany({
+        where: {
+          userId,
+          noteDate: { gte: from, lte: to },
+        },
+        orderBy: { noteDate: 'asc' },
+      }),
+      this.prisma.activePlan.findMany({
+        where: { userId, isActive: true },
+        orderBy: { id: 'asc' },
+      }),
+      this.prisma.dayTask.findMany({
+        where: {
+          kind: 'workout',
+          plan: { userId },
+          taskDate: { gte: recentFrom, lte: to },
+        },
+        orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.dayTask.findMany({
+        where: {
+          kind: 'workout',
+          plan: { userId },
+          taskDate: { gte: weekStart, lte: weekEnd },
+        },
+        orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.dayTask.findMany({
+        where: {
+          kind: 'workout',
+          plan: { userId },
+          taskDate: { gte: today, lte: futureTo },
+          status: null,
+        },
+        orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.dayTask.findMany({
+        where: {
+          kind: 'meal',
+          plan: { userId },
+          taskDate: { gte: recentFrom, lte: to },
+        },
+        orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+      }),
+      this.prisma.dayTask.findMany({
+        where: {
+          kind: 'meal',
+          plan: { userId },
+          taskDate: { gte: today, lte: futureTo },
+          status: null,
+        },
+        orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+      }),
+    ]);
 
     const workouts = tasks.filter((task) => task.kind === 'workout');
     const meals = tasks.filter((task) => task.kind === 'meal');
@@ -216,7 +247,8 @@ export class AssistantService {
       });
     }
 
-    const draftItems = buildWorkoutRecommendations({
+    const mealPlan = plans.find((plan) => plan.type === 'meal');
+    const workoutItems = buildWorkoutRecommendations({
       periodFrom: from,
       periodTo: to,
       today,
@@ -225,6 +257,18 @@ export class AssistantService {
       futureWorkouts: futureWorkouts.map((task) => this.toWorkoutInput(task)),
       feelings: wellbeing,
     });
+    const mealItems = buildMealRecommendations({
+      periodFrom: from,
+      periodTo: to,
+      today,
+      recentMeals: recentMeals.map((task) => this.toMealInput(task)),
+      futureMeals: futureMeals.map((task) => this.toMealInput(task)),
+      dailyCalories: mealPlan?.dailyCalories ?? null,
+      maintenanceCalories: calculateMaintenanceCalories(user),
+      limitationTags: user.limitationTags,
+      feelings: wellbeing,
+    });
+    const draftItems = this.mergeDraftItems(workoutItems, mealItems);
 
     let recommendation: RecommendationResponse | null = null;
     if (draftItems.length > 0) {
@@ -280,6 +324,34 @@ export class AssistantService {
       status: task.status,
       detailsJson: task.detailsJson,
     };
+  }
+
+  private toMealInput(task: {
+    id: number;
+    planId: number;
+    title: string;
+    taskDate: Date;
+    status: TaskStatus | null;
+    detailsJson: Prisma.JsonValue | null;
+  }): MealTaskInput {
+    return {
+      id: task.id,
+      planId: task.planId,
+      title: task.title,
+      taskDate: task.taskDate,
+      status: task.status,
+      detailsJson: task.detailsJson,
+    };
+  }
+
+  private mergeDraftItems(
+    workoutItems: RecommendationItem[],
+    mealItems: RecommendationItem[],
+  ): RecommendationItem[] {
+    return [...workoutItems, ...mealItems].map((item, index) => ({
+      ...item,
+      id: `rec-${index + 1}`,
+    }));
   }
 
   private async resolveComment(

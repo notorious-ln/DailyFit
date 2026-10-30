@@ -6,7 +6,12 @@ export const MAX_VOLUME_CHANGE_RATIO = 0.15;
 
 export type RecDirection = 'ease' | 'harden' | 'neutral';
 
-export type RecChangeKind = 'sets' | 'simplify_exercise' | 'reschedule';
+export type RecChangeKind =
+  | 'sets'
+  | 'simplify_exercise'
+  | 'reschedule'
+  | 'replace_dish'
+  | 'shift_calories';
 
 export type ExerciseShape = {
   name?: string;
@@ -28,6 +33,7 @@ export type RecommendationChange = {
   kind: RecChangeKind;
   direction: RecDirection;
   taskId: number;
+  planId?: number;
   exerciseIndex?: number;
   fromSets?: number;
   toSets?: number;
@@ -36,6 +42,14 @@ export type RecommendationChange = {
   fromDate?: string;
   toDate?: string;
   volumeDeltaSets: number;
+  mealIndex?: number;
+  exampleIndex?: number;
+  fromExample?: string;
+  toExample?: string;
+  fromCalories?: number;
+  toCalories?: number;
+  calorieDelta?: number;
+  clippedToFloor?: boolean;
 };
 
 export type RecommendationItem = {
