@@ -8,8 +8,11 @@ import {
   saveSession,
   saveUser,
 } from './auth/session';
+import type { NavId } from './components/AppShell';
 import { AuthPage } from './pages/AuthPage';
+import { PlansPage } from './pages/PlansPage';
 import { ProfileSetupPage } from './pages/ProfileSetupPage';
+import { TodayPage } from './pages/TodayPage';
 
 function needsSetup(user: Pick<PublicUser, 'goal' | 'level'> | null): boolean {
   return !user || user.goal == null || user.level == null;
@@ -20,6 +23,7 @@ export function App() {
   const [user, setUser] = useState<PublicUser | null>(readUser);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(Boolean(token));
+  const [route, setRoute] = useState<NavId>('today');
 
   useEffect(() => {
     if (!token) {
@@ -61,12 +65,14 @@ export function App() {
     saveSession(response);
     setToken(response.token);
     setUser(response.user);
+    setRoute('today');
   };
 
   const handleProfileComplete = (next: Profile) => {
     setProfile(next);
     setUser(next);
     saveUser(next);
+    setRoute('today');
   };
 
   const handleLogout = () => {
@@ -74,6 +80,7 @@ export function App() {
     setToken(null);
     setUser(null);
     setProfile(null);
+    setRoute('today');
   };
 
   if (!token || !user) {
@@ -100,19 +107,32 @@ export function App() {
     );
   }
 
+  if (!profile) {
+    return (
+      <main className="signed-in">
+        <div className="signed-in-card">
+          <div className="eyebrow">ПРОФИЛЬ</div>
+          <div className="page-title">Загружаем данные…</div>
+        </div>
+      </main>
+    );
+  }
+
+  if (route === 'plans') {
+    return (
+      <PlansPage
+        user={profile}
+        onLogout={handleLogout}
+        onNavigate={setRoute}
+      />
+    );
+  }
+
   return (
-    <main className="signed-in">
-      <div className="signed-in-card">
-        <div className="eyebrow">ПРОФИЛЬ СОХРАНЁН</div>
-        <div className="page-title">Готово к каталогу</div>
-        <p>
-          Цель и уровень для <strong>{user.email}</strong> сохранены на
-          сервере. Следующий экран — каталог планов.
-        </p>
-        <button className="primary-button" type="button" onClick={handleLogout}>
-          Выйти
-        </button>
-      </div>
-    </main>
+    <TodayPage
+      user={profile}
+      onLogout={handleLogout}
+      onNavigate={setRoute}
+    />
   );
 }

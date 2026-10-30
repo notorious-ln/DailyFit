@@ -2,6 +2,8 @@ import path from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const apiTarget = 'http://127.0.0.1:3000';
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -13,9 +15,20 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     proxy: {
-      '/register': 'http://127.0.0.1:3000',
-      '/login': 'http://127.0.0.1:3000',
-      '/profile': 'http://127.0.0.1:3000',
+      '/register': apiTarget,
+      '/login': apiTarget,
+      '/profile': apiTarget,
+      '/templates': apiTarget,
+      '/plans': apiTarget,
+      '/day': apiTarget,
+      '/diary': apiTarget,
+      '/progress': apiTarget,
+      '/activate-workout': apiTarget,
+      '/activate-meal': apiTarget,
+      '/analyze': apiTarget,
+      '/recommendations': apiTarget,
+      '/reports': apiTarget,
+      '/admin': apiTarget,
     },
   },
 });

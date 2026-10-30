@@ -103,6 +103,9 @@ describe('AdminTemplatesService', () => {
         title: 'Старт дома',
         level_place: '1/home',
         is_visible: true,
+        description: null,
+        days_per_week: 1,
+        meals_count: null,
         body_json: { days: [{ title: 'День A' }] },
       },
       {
@@ -111,6 +114,9 @@ describe('AdminTemplatesService', () => {
         title: 'Скрытый',
         level_place: '1/home',
         is_visible: false,
+        description: null,
+        days_per_week: 1,
+        meals_count: null,
         body_json: { days: [{ title: 'День A' }] },
       },
     ]);

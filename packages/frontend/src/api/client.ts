@@ -5,15 +5,21 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 export type ApiErrorBody = {
   message?: string | string[];
   statusCode?: number;
+  requires_confirm?: boolean;
+  current_plan_id?: number;
+  suggested_calories?: number | null;
+  needs_manual_input?: boolean;
 };
 
 export class ApiError extends Error {
   readonly status: number;
+  readonly body: unknown;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, body: unknown = null) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -29,6 +35,13 @@ function readMessage(body: unknown, fallback: string): string {
     return message.filter((item) => typeof item === 'string').join(' ');
   }
   return fallback;
+}
+
+export function asErrorBody(body: unknown): ApiErrorBody | null {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+  return body as ApiErrorBody;
 }
 
 export async function apiRequest<T>(
@@ -64,6 +77,7 @@ export async function apiRequest<T>(
     throw new ApiError(
       response.status,
       readMessage(body, 'Не удалось выполнить запрос'),
+      body,
     );
   }
 
