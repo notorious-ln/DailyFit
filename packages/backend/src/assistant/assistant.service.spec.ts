@@ -1,6 +1,7 @@
 import {
   AssistantSource,
   Feeling,
+  RecommendationStatus,
   TaskStatus,
   TemplateType,
   User,
@@ -40,10 +41,15 @@ function userFixture(): User {
 describe('AssistantService', () => {
   const noteDate = new Date('2026-10-30T00:00:00.000Z');
 
-  function setup(llm: {
-    isEnabled: boolean;
-    complete?: (payload: LlmPayload) => Promise<string>;
-  }) {
+  function setup(
+    llm: {
+      isEnabled: boolean;
+      complete?: (payload: LlmPayload) => Promise<string>;
+    },
+    options?: {
+      dayTaskFindMany?: jest.Mock;
+    },
+  ) {
     const sent: LlmPayload[] = [];
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const create = jest.fn(
@@ -68,6 +74,24 @@ describe('AssistantService', () => {
           source: args.data.source,
         }),
     );
+    const recommendationCreate = jest.fn(
+      (args: {
+        data: {
+          userId: number;
+          periodFrom: Date;
+          periodTo: Date;
+          source: AssistantSource;
+          status: RecommendationStatus;
+          summaryText: string;
+          itemsJson: unknown;
+        };
+      }) =>
+        Promise.resolve({
+          id: 42,
+          createdAt: new Date('2026-10-30T12:05:00.000Z'),
+          ...args.data,
+        }),
+    );
     const complete = jest.fn((payload: LlmPayload) => {
       sent.push(payload);
       if (!llm.complete) {
@@ -77,22 +101,30 @@ describe('AssistantService', () => {
     });
     const prisma = {
       dayTask: {
-        findMany: jest.fn().mockResolvedValue([
-          {
-            id: 10,
-            title: 'День A',
-            kind: 'workout',
-            status: TaskStatus.done,
-            taskDate: noteDate,
-          },
-          {
-            id: 11,
-            title: 'Завтрак',
-            kind: 'meal',
-            status: TaskStatus.skipped,
-            taskDate: noteDate,
-          },
-        ]),
+        findMany:
+          options?.dayTaskFindMany ??
+          jest.fn().mockResolvedValue([
+            {
+              id: 10,
+              planId: 4,
+              title: 'День A',
+              kind: 'workout',
+              status: TaskStatus.done,
+              taskDate: noteDate,
+              detailsJson: {
+                exercises: [{ name: 'Приседания', sets: 3, reps: 12 }],
+              },
+            },
+            {
+              id: 11,
+              planId: 5,
+              title: 'Завтрак',
+              kind: 'meal',
+              status: TaskStatus.skipped,
+              taskDate: noteDate,
+              detailsJson: null,
+            },
+          ]),
       },
       diaryNote: {
         findMany: jest.fn().mockResolvedValue([
@@ -124,6 +156,9 @@ describe('AssistantService', () => {
       assistantReply: {
         create,
       },
+      recommendation: {
+        create: recommendationCreate,
+      },
     };
 
     const users = {
@@ -141,7 +176,15 @@ describe('AssistantService', () => {
       client,
     );
 
-    return { service, create, updateMany, complete, sent };
+    return {
+      service,
+      create,
+      updateMany,
+      complete,
+      sent,
+      recommendationCreate,
+      prisma,
+    };
   }
 
   it('saves an assistant reply apart from diary facts and keeps the free note local', async () => {
@@ -261,5 +304,111 @@ describe('AssistantService', () => {
     const saved = create.mock.calls[0]?.[0].data;
     expect(saved?.role).toBe('assistant');
     expect(saved?.period).toBe('week');
+  });
+
+  it('creates a draft recommendation when skips and future workouts allow ease items', async () => {
+    const dayTaskFindMany = jest.fn(
+      (args: {
+        where?: {
+          kind?: string;
+          status?: null;
+          taskDate?: { gte?: Date; lte?: Date };
+        };
+      }) => {
+        const kind = args.where?.kind;
+        const statusNull = args.where?.status === null;
+        if (kind === 'workout' && statusNull) {
+          return Promise.resolve([
+            {
+              id: 20,
+              planId: 4,
+              title: 'День B',
+              kind: 'workout',
+              status: null,
+              taskDate: new Date('2026-10-31T00:00:00.000Z'),
+              detailsJson: {
+                exercises: [
+                  { name: 'Отжимания с паузой', sets: 3, reps: 8 },
+                  { name: 'Приседания', sets: 3, reps: 12 },
+                ],
+              },
+            },
+          ]);
+        }
+        if (kind === 'workout') {
+          return Promise.resolve([
+            {
+              id: 1,
+              planId: 4,
+              title: 'День A',
+              kind: 'workout',
+              status: TaskStatus.skipped,
+              taskDate: new Date('2026-10-24T00:00:00.000Z'),
+              detailsJson: {
+                exercises: [{ name: 'Приседания', sets: 3, reps: 12 }],
+              },
+            },
+            {
+              id: 2,
+              planId: 4,
+              title: 'День C',
+              kind: 'workout',
+              status: TaskStatus.skipped,
+              taskDate: new Date('2026-10-26T00:00:00.000Z'),
+              detailsJson: {
+                exercises: [{ name: 'Приседания', sets: 3, reps: 12 }],
+              },
+            },
+          ]);
+        }
+        return Promise.resolve([
+          {
+            id: 1,
+            planId: 4,
+            title: 'День A',
+            kind: 'workout',
+            status: TaskStatus.skipped,
+            taskDate: new Date('2026-10-24T00:00:00.000Z'),
+            detailsJson: {
+              exercises: [{ name: 'Приседания', sets: 3, reps: 12 }],
+            },
+          },
+          {
+            id: 2,
+            planId: 4,
+            title: 'День C',
+            kind: 'workout',
+            status: TaskStatus.skipped,
+            taskDate: new Date('2026-10-26T00:00:00.000Z'),
+            detailsJson: {
+              exercises: [{ name: 'Приседания', sets: 3, reps: 12 }],
+            },
+          },
+        ]);
+      },
+    );
+
+    const { service, recommendationCreate } = setup(
+      { isEnabled: false },
+      { dayTaskFindMany },
+    );
+
+    const response = await service.analyze(1, {
+      period: 'week',
+      date: '2026-10-30',
+    });
+
+    expect(recommendationCreate).toHaveBeenCalled();
+    expect(response.recommendation).not.toBeNull();
+    expect(response.recommendation?.status).toBe(RecommendationStatus.draft);
+    expect(response.recommendation?.items_json.length).toBeGreaterThan(0);
+    expect(
+      response.recommendation?.items_json.every(
+        (item) => item.change.direction !== 'harden',
+      ),
+    ).toBe(true);
+    const saved = recommendationCreate.mock.calls[0]?.[0].data;
+    expect(saved?.status).toBe(RecommendationStatus.draft);
+    expect(Array.isArray(saved?.itemsJson)).toBe(true);
   });
 });
