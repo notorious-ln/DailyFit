@@ -9,6 +9,8 @@ import {
   AssistantSource,
   DiaryNote,
   Feeling,
+  Prisma,
+  RecommendationStatus,
   TaskStatus,
 } from '@prisma/client';
 import { asObject } from '../catalog/catalog.service';
@@ -21,6 +23,10 @@ import {
   startOfIsoWeek,
 } from '../day/date.util';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  RecommendationResponse,
+  toRecommendationResponse,
+} from '../recommendations/recommendation.mapper';
 import { UsersService } from '../users/users.service';
 import { ANALYSIS_SCREEN_NOTICE, ASSISTANT_ROLE } from './analysis-notice';
 import { isSafeComment, SAFE_FALLBACK } from './comment-safety';
@@ -32,6 +38,10 @@ import {
   LlmPayload,
 } from './llm-payload';
 import { buildRulesComment } from './rules-comment';
+import {
+  WorkoutTaskInput,
+  buildWorkoutRecommendations,
+} from './rules-workout-recs';
 
 export type DiaryFact = {
   note_date: string;
@@ -56,7 +66,7 @@ export type AnalyzeResponse = {
   assistant_reply: AssistantReplyResponse;
   diary_facts: DiaryFact[];
   screen_notice: string;
-  recommendation: null;
+  recommendation: RecommendationResponse | null;
 };
 
 type AnalyzeInput = {
@@ -81,26 +91,58 @@ export class AssistantService {
     }
 
     const { from, to } = this.resolvePeriod(dto.period, dto.date);
-    const [tasks, notes, plans] = await Promise.all([
-      this.prisma.dayTask.findMany({
-        where: {
-          plan: { userId },
-          taskDate: { gte: from, lte: to },
-        },
-        orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
-      }),
-      this.prisma.diaryNote.findMany({
-        where: {
-          userId,
-          noteDate: { gte: from, lte: to },
-        },
-        orderBy: { noteDate: 'asc' },
-      }),
-      this.prisma.activePlan.findMany({
-        where: { userId, isActive: true },
-        orderBy: { id: 'asc' },
-      }),
-    ]);
+    const today = calendarToday();
+    const recentFrom = addUtcDays(to, -6);
+    const weekStart = startOfIsoWeek(to);
+    const weekEnd = addUtcDays(weekStart, 6);
+    const futureTo = addUtcDays(today, 14);
+
+    const [tasks, notes, plans, recentWorkouts, weekWorkouts, futureWorkouts] =
+      await Promise.all([
+        this.prisma.dayTask.findMany({
+          where: {
+            plan: { userId },
+            taskDate: { gte: from, lte: to },
+          },
+          orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+        }),
+        this.prisma.diaryNote.findMany({
+          where: {
+            userId,
+            noteDate: { gte: from, lte: to },
+          },
+          orderBy: { noteDate: 'asc' },
+        }),
+        this.prisma.activePlan.findMany({
+          where: { userId, isActive: true },
+          orderBy: { id: 'asc' },
+        }),
+        this.prisma.dayTask.findMany({
+          where: {
+            kind: 'workout',
+            plan: { userId },
+            taskDate: { gte: recentFrom, lte: to },
+          },
+          orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+        }),
+        this.prisma.dayTask.findMany({
+          where: {
+            kind: 'workout',
+            plan: { userId },
+            taskDate: { gte: weekStart, lte: weekEnd },
+          },
+          orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+        }),
+        this.prisma.dayTask.findMany({
+          where: {
+            kind: 'workout',
+            plan: { userId },
+            taskDate: { gte: today, lte: futureTo },
+            status: null,
+          },
+          orderBy: [{ taskDate: 'asc' }, { id: 'asc' }],
+        }),
+      ]);
 
     const workouts = tasks.filter((task) => task.kind === 'workout');
     const meals = tasks.filter((task) => task.kind === 'meal');
@@ -174,8 +216,34 @@ export class AssistantService {
       });
     }
 
+    const draftItems = buildWorkoutRecommendations({
+      periodFrom: from,
+      periodTo: to,
+      today,
+      recentWorkouts: recentWorkouts.map((task) => this.toWorkoutInput(task)),
+      weekWorkouts: weekWorkouts.map((task) => this.toWorkoutInput(task)),
+      futureWorkouts: futureWorkouts.map((task) => this.toWorkoutInput(task)),
+      feelings: wellbeing,
+    });
+
+    let recommendation: RecommendationResponse | null = null;
+    if (draftItems.length > 0) {
+      const created = await this.prisma.recommendation.create({
+        data: {
+          userId,
+          periodFrom: from,
+          periodTo: to,
+          source,
+          status: RecommendationStatus.draft,
+          summaryText: text,
+          itemsJson: draftItems as unknown as Prisma.InputJsonValue,
+        },
+      });
+      recommendation = toRecommendationResponse(created);
+    }
+
     this.logger.log(
-      `запрос разбора user=${userId} period=${dto.period} source=${source} boundaries=ok`,
+      `запрос разбора user=${userId} period=${dto.period} source=${source} boundaries=${draftItems.length > 0 ? `ok items=${draftItems.length}` : 'filtered_empty'}`,
     );
 
     return {
@@ -192,7 +260,25 @@ export class AssistantService {
       },
       diary_facts: notes.map((note) => this.toDiaryFact(note)),
       screen_notice: ANALYSIS_SCREEN_NOTICE,
-      recommendation: null,
+      recommendation,
+    };
+  }
+
+  private toWorkoutInput(task: {
+    id: number;
+    planId: number;
+    title: string;
+    taskDate: Date;
+    status: TaskStatus | null;
+    detailsJson: Prisma.JsonValue | null;
+  }): WorkoutTaskInput {
+    return {
+      id: task.id,
+      planId: task.planId,
+      title: task.title,
+      taskDate: task.taskDate,
+      status: task.status,
+      detailsJson: task.detailsJson,
     };
   }
 

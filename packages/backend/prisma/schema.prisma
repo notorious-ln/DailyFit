@@ -50,6 +50,13 @@ enum AssistantSource {
   rules
 }
 
+enum RecommendationStatus {
+  draft
+  accepted
+  partially_accepted
+  rejected
+}
+
 model User {
   id              Int            @id @default(autoincrement())
   email           String         @unique
@@ -69,6 +76,7 @@ model User {
   activePlans     ActivePlan[]
   diaryNotes      DiaryNote[]
   assistantReplies AssistantReply[]
+  recommendations Recommendation[]
 
   @@map("users")
 }
@@ -148,4 +156,20 @@ model AssistantReply {
 
   @@index([userId, periodFrom])
   @@map("assistant_replies")
+}
+
+model Recommendation {
+  id          Int                  @id @default(autoincrement())
+  userId      Int                  @map("user_id")
+  periodFrom  DateTime             @map("period_from") @db.Date
+  periodTo    DateTime             @map("period_to") @db.Date
+  source      AssistantSource
+  status      RecommendationStatus @default(draft)
+  summaryText String               @map("summary_text")
+  itemsJson   Json                 @map("items_json")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("recommendations")
 }

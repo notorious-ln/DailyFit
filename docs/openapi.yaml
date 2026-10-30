@@ -342,7 +342,7 @@ paths:
       tags: [Assistant]
       summary: Запросить разбор дня или недели
       description: |
-        Явный запрос разбора дня или недели (FT-10).
+        Явный запрос разбора дня или недели (FT-10) и черновики корректировок тренировок (FT-11).
         Во внешнюю модель уходят цель, уровень, метки ограничений, сводка процентов,
         число пропусков, самочувствие, параметры активного плана и комментарий
         пользователя за день. Комментарий уходит только потому, что разбор —
@@ -352,6 +352,11 @@ paths:
         В нём нет диагноза и нет обещания изменить вес к дате.
         Комментарий сохраняется репликой помощника отдельно от фактов дневника.
         При включённом облачном помощнике — LLM, иначе и при сбое или опасном тексте — правила.
+        Пункты рекомендации строятся правилами: уменьшить/немного увеличить подходы,
+        заменить упражнение более простым вариантом, перенести тренировку на другой день.
+        За одну рекомендацию суммарный объём тренировок недели меняется не более чем на 15%.
+        Если за семь дней пропущены две тренировки или больше, усложнение не предлагается.
+        Если после проверки границ пунктов нет — recommendation = null.
       operationId: analyze
       requestBody:
         required: true
@@ -374,8 +379,10 @@ paths:
       tags: [Recommendations]
       summary: Принять или отклонить рекомендацию
       description: |
+        Принятие или отклонение черновика корректировки тренировок (FT-11 / UC-10).
         При принятии изменения применяются только к будущим задачам.
         Прошедшие дни и уже поставленные отметки не переписываются.
+        Выбранные пункты повторно проверяются на лимит 15% недельного объёма.
       operationId: decideRecommendation
       parameters:
         - $ref: '#/components/parameters/IdPath'
@@ -980,7 +987,9 @@ components:
           allOf:
             - $ref: '#/components/schemas/Recommendation'
           nullable: true
-          description: null, пока разбор отдаёт только комментарий
+          description: |
+            Черновик корректировок тренировок (FT-11) или null,
+            если после проверки границ допустимых пунктов нет.
 
     AssistantReply:
       type: object
@@ -1064,11 +1073,44 @@ components:
           type: string
         title:
           type: string
+          description: Кратко — задача и тип правки
         description:
           type: string
+          description: Задача, предлагаемое изменение и причина
         selected:
           type: boolean
           default: false
+        change:
+          type: object
+          description: Машиночитаемая правка для применения при accept
+          properties:
+            kind:
+              type: string
+              enum: [sets, simplify_exercise, reschedule]
+            direction:
+              type: string
+              enum: [ease, harden, neutral]
+            taskId:
+              type: integer
+            exerciseIndex:
+              type: integer
+            fromSets:
+              type: integer
+            toSets:
+              type: integer
+            fromName:
+              type: string
+            toName:
+              type: string
+            fromDate:
+              type: string
+              format: date
+            toDate:
+              type: string
+              format: date
+            volumeDeltaSets:
+              type: integer
+              description: Вклад пункта в изменение недельного объёма (подходы)
 
     RecommendationDecide:
       type: object
