@@ -32,7 +32,10 @@ tags:
   - name: Recommendations
     description: UC-10 — принятие / отклонение правок
   - name: Admin
-    description: UC-11 — шаблоны администратора
+    description: |
+      FT-16 / UC-11 — администрирование шаблонов.
+      Изменение шаблона не затрагивает уже активированные копии.
+      Лента чужих комментариев дневника в первой версии не отдаётся.
 
 paths:
   /register:
@@ -471,7 +474,10 @@ paths:
   /admin/templates:
     get:
       tags: [Admin]
-      summary: Список всех шаблонов (admin)
+      summary: Список всех шаблонов, включая скрытые (admin)
+      description: |
+        Каталог администратора. Скрытые шаблоны тоже возвращаются.
+        Чужие комментарии дневника в этот ответ не входят.
       operationId: adminListTemplates
       responses:
         '200':
@@ -542,6 +548,9 @@ paths:
     patch:
       tags: [Admin]
       summary: Скрыть шаблон из каталога
+      description: |
+        Ставит is_visible = false. Шаблон пропадает из пользовательского каталога.
+        Активные копии, которые пользователи уже ведут, не меняются.
       operationId: adminHideTemplate
       parameters:
         - $ref: '#/components/parameters/IdPath'
