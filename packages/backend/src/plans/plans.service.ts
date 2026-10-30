@@ -5,12 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  ActivePlan,
-  Prisma,
-  Template,
-  TemplateType,
-} from '@prisma/client';
+import { ActivePlan, Prisma, TemplateType } from '@prisma/client';
 import { asObject } from '../catalog/catalog.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -81,32 +76,32 @@ export class PlansService {
       });
     }
 
-    const current = await this.prisma.activePlan.findFirst({
-      where: {
-        userId,
-        type: TemplateType.workout,
-        isActive: true,
-      },
-    });
-
-    if (current && !dto.confirmReplace) {
-      throw new ConflictException({
-        message: 'Уже есть активный план тренировок. Подтвердите замену.',
-        current_plan_id: current.id,
-        requires_confirm: true,
-      } satisfies PlanReplaceWarning);
-    }
-
     const plan = await this.prisma.$transaction(async (tx) => {
-      if (current) {
-        await tx.activePlan.update({
-          where: { id: current.id },
-          data: {
-            isActive: false,
-            endedAt: new Date(),
-          },
-        });
+      await this.lockUser(tx, userId);
+      const current = await tx.activePlan.findFirst({
+        where: {
+          userId,
+          type: TemplateType.workout,
+          isActive: true,
+        },
+        orderBy: { id: 'desc' },
+      });
+
+      if (current && !dto.confirmReplace) {
+        throw new ConflictException({
+          message: 'Уже есть активный план тренировок. Подтвердите замену.',
+          current_plan_id: current.id,
+          requires_confirm: true,
+        } satisfies PlanReplaceWarning);
       }
+
+      const today = calendarToday();
+      const occupiedDates = await this.retireActivePlans(
+        tx,
+        userId,
+        TemplateType.workout,
+        today,
+      );
 
       const created = await tx.activePlan.create({
         data: {
@@ -120,7 +115,7 @@ export class PlansService {
         },
       });
 
-      await this.generateFutureWorkoutTasks(tx, created, template);
+      await this.generateFutureWorkoutTasks(tx, created, today, occupiedDates);
 
       return created;
     });
@@ -182,24 +177,15 @@ export class PlansService {
       });
     }
 
-    const current = await this.prisma.activePlan.findFirst({
-      where: {
-        userId,
-        type: TemplateType.meal,
-        isActive: true,
-      },
-    });
-
     const plan = await this.prisma.$transaction(async (tx) => {
-      if (current) {
-        await tx.activePlan.update({
-          where: { id: current.id },
-          data: {
-            isActive: false,
-            endedAt: new Date(),
-          },
-        });
-      }
+      await this.lockUser(tx, userId);
+      const today = calendarToday();
+      const occupiedDates = await this.retireActivePlans(
+        tx,
+        userId,
+        TemplateType.meal,
+        today,
+      );
 
       const created = await tx.activePlan.create({
         data: {
@@ -214,7 +200,13 @@ export class PlansService {
         },
       });
 
-      await this.generateFutureMealTasks(tx, created, template, dailyCalories);
+      await this.generateFutureMealTasks(
+        tx,
+        created,
+        today,
+        dailyCalories,
+        occupiedDates,
+      );
 
       return created;
     });
@@ -226,19 +218,59 @@ export class PlansService {
     return this.toActivePlan(plan);
   }
 
+  private async lockUser(
+    tx: Prisma.TransactionClient,
+    userId: number,
+  ): Promise<void> {
+    await tx.$queryRaw`SELECT id FROM "users" WHERE id = ${userId} FOR UPDATE`;
+  }
+
+  /** Ends active plans of this type and drops unmarked tasks from today on. */
+  private async retireActivePlans(
+    tx: Prisma.TransactionClient,
+    userId: number,
+    type: TemplateType,
+    today: Date,
+  ): Promise<Set<string>> {
+    await tx.activePlan.updateMany({
+      where: { userId, type, isActive: true },
+      data: { isActive: false, endedAt: new Date() },
+    });
+
+    const kept = await tx.dayTask.findMany({
+      where: {
+        taskDate: { gte: today },
+        status: { not: null },
+        plan: { userId, type },
+      },
+      select: { taskDate: true },
+    });
+
+    await tx.dayTask.deleteMany({
+      where: {
+        taskDate: { gte: today },
+        status: null,
+        plan: { userId, type },
+      },
+    });
+
+    return new Set(kept.map((task) => dateKey(task.taskDate)));
+  }
+
   private async generateFutureWorkoutTasks(
     tx: Prisma.TransactionClient,
     plan: ActivePlan,
-    template: Template,
+    today: Date,
+    occupiedDates: Set<string>,
   ): Promise<void> {
-    const body = asObject(template.bodyJson);
+    const body = asObject(plan.bodyJson);
     const days = Array.isArray(body.days) ? (body.days as WorkoutDay[]) : [];
     if (days.length === 0) {
       return;
     }
 
-    const today = startOfUtcDay(new Date());
     const tasks: Prisma.DayTaskCreateManyInput[] = [];
+    const scheduled = new Set(occupiedDates);
     const cycleLength = Math.max(
       days.length,
       typeof body.days_per_week === 'number' ? body.days_per_week : days.length,
@@ -249,11 +281,16 @@ export class PlansService {
       for (const [index, dayDef] of days.entries()) {
         const dayOffset = dayDef.day_offset ?? index;
         const taskDate = addUtcDays(today, week * cycleLength + dayOffset);
+        const key = dateKey(taskDate);
+        if (scheduled.has(key)) {
+          continue;
+        }
+        scheduled.add(key);
         tasks.push({
           planId: plan.id,
           taskDate,
           kind: 'workout',
-          title: dayDef.title ?? `Тренировка: ${template.title}`,
+          title: dayDef.title ?? `Тренировка: ${plan.title}`,
           detailsJson: {
             day_offset: dayOffset,
             description: dayDef.description ?? null,
@@ -271,24 +308,32 @@ export class PlansService {
   private async generateFutureMealTasks(
     tx: Prisma.TransactionClient,
     plan: ActivePlan,
-    template: Template,
+    today: Date,
     dailyCalories: number,
+    occupiedDates: Set<string>,
   ): Promise<void> {
-    const body = asObject(template.bodyJson);
+    const body = asObject(plan.bodyJson);
     const meals = Array.isArray(body.meals) ? (body.meals as MealItem[]) : [];
-    const today = startOfUtcDay(new Date());
     const daysCount = this.weeksAhead * 7;
     const tasks: Prisma.DayTaskCreateManyInput[] = [];
+    const scheduled = new Set(occupiedDates);
 
     for (let day = 0; day < daysCount; day += 1) {
+      const taskDate = addUtcDays(today, day);
+      const key = dateKey(taskDate);
+      if (scheduled.has(key)) {
+        continue;
+      }
+      scheduled.add(key);
       tasks.push({
         planId: plan.id,
-        taskDate: addUtcDays(today, day),
+        taskDate,
         kind: 'meal',
-        title: `Питание: ${template.title}`,
+        title: `Питание: ${plan.title}`,
         detailsJson: {
           daily_calories: dailyCalories,
-          description: typeof body.description === 'string' ? body.description : null,
+          description:
+            typeof body.description === 'string' ? body.description : null,
           meals,
         } as Prisma.InputJsonValue,
       });
@@ -313,10 +358,14 @@ export class PlansService {
   }
 }
 
-function startOfUtcDay(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
+/** Calendar date in the server timezone, stored as a UTC midnight @db.Date. */
+function calendarToday(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
+function dateKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 function addUtcDays(date: Date, days: number): Date {
