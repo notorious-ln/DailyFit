@@ -38,6 +38,10 @@ export class ProfileService {
     dto: UpdateProfileDto,
   ): Promise<ProfileResponse> {
     const user = await this.usersService.updateProfile(userId, {
+      displayName:
+        dto.display_name === undefined
+          ? undefined
+          : dto.display_name?.trim() || null,
       goal: dto.goal,
       level: dto.level,
       place: dto.place,

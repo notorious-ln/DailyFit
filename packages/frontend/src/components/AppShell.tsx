@@ -32,7 +32,7 @@ const NAV: Array<{
   { id: 'today', label: 'Сегодня', icon: 'calendar', ready: true },
   { id: 'plans', label: 'Планы', icon: 'clipboard', ready: true },
   { id: 'progress', label: 'Прогресс', icon: 'chart', ready: true },
-  { id: 'profile', label: 'Профиль', icon: 'user' },
+  { id: 'profile', label: 'Профиль', icon: 'user', ready: true },
   { id: 'diary', label: 'Дневник', icon: 'book' },
   { id: 'templates', label: 'Шаблоны', icon: 'templates', adminOnly: true },
 ];
@@ -99,14 +99,18 @@ export function AppShell({
             <span>Выйти</span>
           </button>
 
-          <div className="user-chip">
+          <button
+            type="button"
+            className="user-chip"
+            onClick={() => onNavigate?.('profile')}
+          >
             <div className="user-avatar">{avatar}</div>
             <div className="user-meta">
               <strong>{name}</strong>
               <span>{levelLabel}</span>
             </div>
             <Icon name="chevron-right" size={16} />
-          </div>
+          </button>
         </div>
       </aside>
 

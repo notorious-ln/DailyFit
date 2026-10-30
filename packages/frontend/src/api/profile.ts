@@ -22,6 +22,7 @@ export type Profile = {
 };
 
 export type ProfileUpdate = {
+  display_name?: string | null;
   goal: number;
   level: number;
   place?: TrainingPlace;

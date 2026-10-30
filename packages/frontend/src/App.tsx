@@ -11,6 +11,7 @@ import {
 import type { NavId } from './components/AppShell';
 import { AuthPage } from './pages/AuthPage';
 import { PlansPage } from './pages/PlansPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { ProfileSetupPage } from './pages/ProfileSetupPage';
 import { ProgressPage } from './pages/ProgressPage';
 import { TodayPage } from './pages/TodayPage';
@@ -76,6 +77,12 @@ export function App() {
     setRoute('today');
   };
 
+  const handleProfileChange = (next: Profile) => {
+    setProfile(next);
+    setUser(next);
+    saveUser(next);
+  };
+
   const handleLogout = () => {
     clearSession();
     setToken(null);
@@ -135,6 +142,17 @@ export function App() {
         user={profile}
         onLogout={handleLogout}
         onNavigate={setRoute}
+      />
+    );
+  }
+
+  if (route === 'profile') {
+    return (
+      <ProfilePage
+        user={profile}
+        onLogout={handleLogout}
+        onNavigate={setRoute}
+        onProfileChange={handleProfileChange}
       />
     );
   }
