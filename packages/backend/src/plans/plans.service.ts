@@ -19,6 +19,9 @@ export type ActivePlanResponse = {
   user_id: number;
   template_id: number;
   type: TemplateType;
+  title: string;
+  level_place: string;
+  body_json: Record<string, unknown>;
   is_active: boolean;
   started_at: string;
   ended_at: string | null;
@@ -59,6 +62,14 @@ export class PlansService {
     private readonly usersService: UsersService,
     private readonly journal: JournalService,
   ) {}
+
+  async listActive(userId: number): Promise<ActivePlanResponse[]> {
+    const plans = await this.prisma.activePlan.findMany({
+      where: { userId, isActive: true },
+      orderBy: [{ type: 'asc' }, { id: 'desc' }],
+    });
+    return plans.map((plan) => this.toActivePlan(plan));
+  }
 
   async activateWorkout(
     userId: number,
@@ -376,6 +387,9 @@ export class PlansService {
       user_id: plan.userId,
       template_id: plan.templateId,
       type: plan.type,
+      title: plan.title,
+      level_place: plan.levelPlace,
+      body_json: asObject(plan.bodyJson),
       is_active: plan.isActive,
       started_at: plan.startedAt.toISOString(),
       ended_at: plan.endedAt ? plan.endedAt.toISOString() : null,

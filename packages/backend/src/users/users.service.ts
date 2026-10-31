@@ -10,6 +10,7 @@ export type CreateUserInput = {
 };
 
 export type UpdateProfileInput = {
+  displayName?: string | null;
   goal: number;
   level: number;
   place?: TrainingPlace;
@@ -51,6 +52,9 @@ export class UsersService {
       .update({
         where: { id },
         data: {
+          ...(data.displayName !== undefined
+            ? { displayName: data.displayName }
+            : {}),
           goal: data.goal,
           level: data.level,
           ...(data.place !== undefined ? { place: data.place } : {}),

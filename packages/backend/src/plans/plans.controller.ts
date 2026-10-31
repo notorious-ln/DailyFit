@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -19,6 +20,11 @@ import { PlansService } from './plans.service';
 @UseGuards(JwtAuthGuard)
 export class PlansController {
   constructor(private readonly plansService: PlansService) {}
+
+  @Get('plans/active')
+  listActive(@CurrentUser() user: PublicUser) {
+    return this.plansService.listActive(user.id);
+  }
 
   @Post('activate-workout')
   @HttpCode(HttpStatus.OK)
